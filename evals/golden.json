@@ -1,0 +1,1193 @@
+{
+  "_readme": "GSTPilot golden set v2 — schema in evals/golden-schema.ts, labeling rules in docs/LABELING_GUIDE.md. Only status:verified cases gate CI. Target: 60 cases (40 answerable / 20 unanswerable).",
+  "cases": [
+    {
+      "id": "g001",
+      "question": "flipkart seller hoon, do states me godown hai, do registration chahiye",
+      "expected_intent": "registration",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s22",
+        "CGST-ACT/s24",
+        "CGST-ACT/s25"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "anand",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft",
+      "note": "multi-state ECO seller registration; baseline run had s25 at fused #3, s22/s24 outside top-5"
+    },
+    {
+      "id": "g002",
+      "question": "footwear ka GST rate kya hai",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p9",
+        "NOTIF-CTR/ntr-2021-021"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "claude-example",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft",
+      "note": "current operative slab is the Sept-2025 schedule (Rs.2500/pair)"
+    },
+    {
+      "id": "g003",
+      "question": "invoice hai par supplier ko 6 mahine se payment nahi kiya — ITC reverse hoga?",
+      "expected_intent": "itc_eligibility",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s16"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "claude-example",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft",
+      "note": "180-day payment proviso to s16(2)"
+    },
+    {
+      "id": "g004",
+      "question": "what is the time limit to issue a credit note for FY 2024-25?",
+      "expected_intent": "returns_filing",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s34"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "claude-example",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g005",
+      "question": "Amazon pe bechta hu, TCS kitna katega?",
+      "expected_intent": "ecommerce_liability",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s52"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "claude-example",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g006",
+      "question": "GSTR-9C late file karne pe penalty?",
+      "expected_intent": "late_fee_interest",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CIRCULAR/cir-2025-246/p1",
+        "CGST-ACT/s47"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "claude-example",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g007",
+      "question": "Amazon pe goods sell kar raha hu, turnover 12 lakh hai, GST lena padega?",
+      "expected_intent": "registration",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s24",
+        "CGST-ACT/s22"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g008",
+      "question": "supplier ne GSTR-1 me invoice nahi dala, ITC claim kar sakta hu?",
+      "expected_intent": "itc_eligibility",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s16"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g009",
+      "question": "Meesho ne TCS kaat liya, section 52 me kitna aur kab pay hota hai?",
+      "expected_intent": "ecommerce_liability",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s52"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g010",
+      "question": "restaurant Swiggy se order le raha hai, GST restaurant bhare ya Swiggy?",
+      "expected_intent": "ecommerce_liability",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CIRCULAR/cir-2021-167/p1",
+        "NOTIF-CTR/ntr-2021-017",
+        "CGST-ACT/s9"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g011",
+      "question": "t-shirt 1800 MRP hai, apparel GST slab kaunsi?",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p9"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g012",
+      "question": "LED TV bechta hu, GST rate kaunsa lagega?",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p25"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g013",
+      "question": "skin cream aur lipstick cosmetics ka GST rate?",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p13"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g014",
+      "question": "last year turnover 6 crore tha, e-invoice mandatory hai kya?",
+      "expected_intent": "returns_filing",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CT/nt-2023-010",
+        "CGST-RULES/r48"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g015",
+      "question": "Monthly GSTR-3B ki normal due date kya hai?",
+      "expected_intent": "returns_filing",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-RULES/r61",
+        "CGST-ACT/s39"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g016",
+      "question": "GSTR-1 late ho gaya, late fee ka cap kahan se aata hai?",
+      "expected_intent": "late_fee_interest",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CT/nt-2021-020",
+        "CGST-ACT/s47"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g017",
+      "question": "LUT pe export invoice banaya, unused ITC refund mil sakta hai?",
+      "expected_intent": "refund_export",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "IGST-ACT/s16",
+        "CGST-ACT/s54",
+        "CGST-RULES/r89"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g018",
+      "question": "courier se 60k ka parcel bhej raha hu, e-way bill chahiye?",
+      "expected_intent": "eway_bill",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-RULES/r138"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g019",
+      "question": "composition me hu, interstate Amazon orders le sakta hu kya?",
+      "expected_intent": "composition",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s10"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g020",
+      "question": "Delhi se Bengaluru customer ko goods ship kiye, place of supply kya hoga?",
+      "expected_intent": "place_of_supply",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "IGST-ACT/s10"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g021",
+      "question": "US client ko freelance design service de raha hu, place of supply kya hoga?",
+      "expected_intent": "place_of_supply",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "IGST-ACT/s13"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g022",
+      "question": "Amazon 194-O TDS GST cash ledger se adjust ho jayega kya?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g023",
+      "question": "Maharashtra SGST Act ka exact registration section batao",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g024",
+      "question": "China se imported mobile covers par customs duty kitni hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g025",
+      "question": "Karnataka professional tax freelancer ko pay karna hai kya?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g026",
+      "question": "DRC-01 notice aaya hai ITC mismatch ka, ab kya reply karu?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s73",
+        "CGST-ACT/s75"
+      ],
+      "expected_answer_facts": [
+        "show cause",
+        "at least three months"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g027",
+      "question": "department ne fraud bolke GST notice bheja, penalty ka exposure kya hai?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s74"
+      ],
+      "expected_answer_facts": [
+        "at least six months",
+        "fifteen per cent."
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g028",
+      "question": "GST audit notice mila hai, documents kab tak ready rakhne honge?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s65"
+      ],
+      "expected_answer_facts": [
+        "fifteen working days",
+        "three months",
+        "six months"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g029",
+      "question": "demand order pass ho gaya, payment nahi kiya to recovery kab start hogi?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s78",
+        "CGST-ACT/s79"
+      ],
+      "expected_answer_facts": [
+        "three months",
+        "recovery proceedings"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g030",
+      "question": "GST department ne bank account attach kar diya, ye kis section me hota hai?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s83"
+      ],
+      "expected_answer_facts": [
+        "bank account",
+        "one year"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g031",
+      "question": "penalty order mila hai, appeal file karne ki deadline kya hai?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s107"
+      ],
+      "expected_answer_facts": [
+        "within three months",
+        "one month"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g032",
+      "question": "e-way bill issue ki wajah se goods seized ho gaye, penalty notice ka rule kya hai?",
+      "expected_intent": "notice_dispute",
+      "expected_tier": "T3",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s129"
+      ],
+      "expected_answer_facts": [
+        "within seven days",
+        "two hundred per cent.",
+        "twenty-five thousand rupees"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g033",
+      "question": "55k ka stock warehouse se customer ko bhej raha hu, e-way bill threshold kya hai?",
+      "expected_intent": "eway_bill",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-RULES/r138"
+      ],
+      "expected_answer_facts": [
+        "fifty thousand rupees"
+      ],
+      "must_not_contain": [
+        "one lakh rupees"
+      ],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g034",
+      "question": "transport wale ko invoice ke saath e-way bill print dena zaroori hai kya?",
+      "expected_intent": "eway_bill",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-RULES/r138A"
+      ],
+      "expected_answer_facts": [
+        "invoice or bill of supply or delivery challan",
+        "e-way bill number"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g035",
+      "question": "Delhi exhibition me 5 din stall lagana hai, casual GST registration kab apply karu?",
+      "expected_intent": "registration",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s24",
+        "CGST-ACT/s25",
+        "CGST-ACT/s27"
+      ],
+      "expected_answer_facts": [
+        "at least five days",
+        "ninety days"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g036",
+      "question": "same state me two warehouses hain, separate GSTIN le sakta hu?",
+      "expected_intent": "registration",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s25",
+        "CGST-RULES/r11"
+      ],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g037",
+      "question": "composition seller Amazon pe goods bech sakta hai, interstate order allow hai kya?",
+      "expected_intent": "composition",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CT/nt-2023-036",
+        "CGST-ACT/s10",
+        "CGST-ACT/s52"
+      ],
+      "expected_answer_facts": [
+        "shall not allow any inter-State supply of goods"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g038",
+      "question": "marketplace operator ko GSTR-8 kab file karna hota hai?",
+      "expected_intent": "ecommerce_liability",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s52",
+        "CGST-RULES/r67"
+      ],
+      "expected_answer_facts": [
+        "within ten days",
+        "FORM GSTR-8"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g039",
+      "question": "cab booking app pe rides leta hu, GST app bharega ya driver?",
+      "expected_intent": "ecommerce_liability",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2017-017",
+        "CGST-ACT/s9"
+      ],
+      "expected_answer_facts": [
+        "radio-taxi",
+        "motorcab"
+      ],
+      "must_not_contain": [
+        "restaurant service"
+      ],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g040",
+      "question": "team lunch aur office snacks ka GST ITC claim kar sakte hain kya?",
+      "expected_intent": "itc_eligibility",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s17"
+      ],
+      "expected_answer_facts": [
+        "food and beverages"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g041",
+      "question": "FY 2024-25 purchase invoice ka ITC last date kya hai?",
+      "expected_intent": "itc_eligibility",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "CGST-ACT/s16"
+      ],
+      "expected_answer_facts": [
+        "thirtieth day of November"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g042",
+      "question": "LUT ke under export without IGST karna hai, kaunsa form/bond rule cite hoga?",
+      "expected_intent": "refund_export",
+      "expected_tier": "T2",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "IGST-ACT/s16",
+        "CGST-RULES/r96A"
+      ],
+      "expected_answer_facts": [
+        "Letter of Undertaking",
+        "without payment of integrated tax"
+      ],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g043",
+      "question": "Rs 2200 ke footwear pair pe current GST slab kya hai?",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p1",
+        "NOTIF-CTR/ntr-2025-009/p9"
+      ],
+      "expected_answer_facts": [
+        "2.5 per cent.",
+        "Rs.2500 per pair"
+      ],
+      "must_not_contain": [
+        "Rs.1000 per pair"
+      ],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g044",
+      "question": "laptop aur computer goods ka GST rate schedule me kahan milega?",
+      "expected_intent": "rate_lookup",
+      "expected_tier": "T1",
+      "unanswerable": false,
+      "relevant_chunk_ids": [
+        "NOTIF-CTR/ntr-2025-009/p1",
+        "NOTIF-CTR/ntr-2025-009/p23"
+      ],
+      "expected_answer_facts": [
+        "9 per cent.",
+        "Automatic data processing machines"
+      ],
+      "must_not_contain": [
+        "12%",
+        "consult a CA"
+      ],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g045",
+      "question": "Amazon 194-O TDS ka rate FY 2026-27 me kya hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g046",
+      "question": "Flipkart TDS ke liye 26Q return me kaunsa section code dalna hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g047",
+      "question": "Maharashtra SGST Act me section 73 ka wording same hai kya?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g048",
+      "question": "Tamil Nadu SGST appeal form ka exact rule number batao",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g049",
+      "question": "China se imported headphones par basic customs duty kitni lagegi?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g050",
+      "question": "power bank import kar raha hu, customs HSN duty breakup bata do",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g051",
+      "question": "Karnataka professional tax slab freelancer ke liye kya hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g052",
+      "question": "Maharashtra PTRC registration employees ke liye kab compulsory hota hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g053",
+      "question": "home bakery ke liye FSSAI license basic chahiye ya state?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g054",
+      "question": "Amazon export start karna hai, IEC code apply kaise karu?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g055",
+      "question": "foreign client ka payment late aaya, FEMA realisation extension ka rule kya hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g056",
+      "question": "10 employees ho gaye, PF ESI registration threshold kya hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g057",
+      "question": "shop and establishment license online store ke liye mandatory hai kya?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g058",
+      "question": "brand name register karna hai, trademark class cosmetics ke liye kaunsi?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g059",
+      "question": "private limited company ka ROC annual filing due date kya hai?",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    },
+    {
+      "id": "g060",
+      "question": "advance ruling Karnataka me mere product pe hua tha kya, case law dikhao",
+      "expected_intent": "out_of_scope",
+      "expected_tier": "T1",
+      "unanswerable": true,
+      "relevant_chunk_ids": [],
+      "expected_answer_facts": [],
+      "must_not_contain": [],
+      "policy_version": "2026-07-07",
+      "provenance": {
+        "author": "codex",
+        "verified_by": null,
+        "verified_on": null
+      },
+      "status": "draft"
+    }
+  ]
+}

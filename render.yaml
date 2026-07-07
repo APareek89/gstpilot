@@ -1,0 +1,31 @@
+# Render blueprint — what Render actually runs: on every git push, Render pulls the repo,
+# runs buildCommand in a container, then keeps startCommand alive behind its load balancer
+# (Supabase stays managed elsewhere; scripts/ stay local/CI). First boot downloads the
+# bge-m3 model (~600MB) into the instance disk — needs the 2GB "standard" instance, and
+# cold starts take ~1 min. If that hurts, the upgrade path is an embedding API provider.
+
+services:
+  - type: web
+    name: gstpilot
+    runtime: node
+    plan: standard          # bge-m3 in-process needs ~1.5GB RAM; starter (512MB) will OOM
+    buildCommand: corepack enable pnpm && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://cloud.langfuse.com
+      - key: NODE_VERSION
+        value: "22"

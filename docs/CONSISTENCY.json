@@ -1,0 +1,109 @@
+{
+ "t2_pass5": "0.500",
+ "t3_pass5": "1.000",
+ "trajectory_rule_rate": "1.000",
+ "rows": [
+  {
+   "id": "g003",
+   "tier": "T2",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g004",
+   "tier": "T2",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g006",
+   "tier": "T2",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g008",
+   "tier": "T2",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g016",
+   "tier": "T2",
+   "passes": "10111",
+   "pass5": false
+  },
+  {
+   "id": "g017",
+   "tier": "T2",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g026",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g027",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g028",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g029",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g030",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g031",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g032",
+   "tier": "T3",
+   "passes": "11111",
+   "pass5": true
+  },
+  {
+   "id": "g035",
+   "tier": "T2",
+   "passes": "00000",
+   "pass5": false
+  },
+  {
+   "id": "g040",
+   "tier": "T2",
+   "passes": "00100",
+   "pass5": false
+  },
+  {
+   "id": "g041",
+   "tier": "T2",
+   "passes": "00000",
+   "pass5": false
+  },
+  {
+   "id": "g042",
+   "tier": "T2",
+   "passes": "00000",
+   "pass5": false
+  }
+ ]
+}

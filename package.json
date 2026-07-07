@@ -1,0 +1,48 @@
+{
+  "name": "gstpilot",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint",
+    "check-setup": "tsx scripts/check-setup.ts",
+    "migrate": "tsx scripts/apply-migrations.ts",
+    "download-corpus": "tsx scripts/download-corpus.ts",
+    "download-stream": "NODE_EXTRA_CA_CERTS=scripts/certs/entrust-intermediate.pem tsx scripts/download-stream.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "embed": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" tsx scripts/embed-chunks.ts",
+    "golden:validate": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" tsx scripts/validate-golden.ts",
+    "eval": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/retrieval.eval.test.ts",
+    "langfuse:sync": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" tsx scripts/langfuse-sync.ts",
+    "eval:answer": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/answer.eval.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@huggingface/transformers": "^4.2.0",
+    "@supabase/supabase-js": "^2.110.0",
+    "dotenv": "^17.4.2",
+    "langfuse": "^3.38.20",
+    "next": "15.5.20",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.20",
+    "pdf-parse": "1.1.1",
+    "pg": "^8.22.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.0",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
