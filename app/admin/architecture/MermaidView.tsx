@@ -164,7 +164,10 @@ export default function MermaidView({ diagrams, prompts, staleInfo, memory }: { 
         <div className="space-y-6">
           {/* 1 · The flow: how memory moves through a turn (same diagram as docs/mermaid/06-memory.mmd) */}
           <section>
-            <h2 className="text-lg font-semibold mb-1">How memory flows (Phase 8c)</h2>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-semibold mb-1">How memory flows (Phase 8c)</h2>
+              <a href="/memory-explained.html" target="_blank" className="text-sm text-indigo-600 hover:underline">▶ interactive explainer</a>
+            </div>
             <p className="text-sm text-gray-500 mb-2">
               Three types kept distinct — <b>WORKING</b> (this thread&apos;s gather, <code>threads.pending</code>) ·{" "}
               <b>BEHAVIORAL</b> (observed facts, low trust until confirmed) · <b>PROCEDURAL</b> (confirmed defaults).

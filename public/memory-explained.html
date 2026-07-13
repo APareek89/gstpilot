@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<!-- GSTPilot — "How memory works", the interactive explainer (Phase 8c).
+     Self-contained (no libraries): a scripted two-session conversation plays on the left,
+     and the REAL storage — thread.pending (working memory), user_memory rows (behavioral +
+     procedural) — updates live on the right, exactly as the code does it. Served at
+     /memory-explained.html; source of truth for behavior is lib/memory/* + lanes/calculation.ts. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GSTPilot — how memory works (interactive)</title>
+<style>
+  :root{
+    --paper:#faf8f4; --surface:#ffffff; --ink:#211d19; --muted:#8a8073; --line:#e8e2d8;
+    --brand:#0e6e5c; --brand-soft:#e3f0ec; --brand-ink:#0a5445;
+    --amber:#b45309; --amber-soft:#fdf3e3; --rust:#b03a2e; --rust-soft:#fbeae7;
+    --blue:#2563eb; --blue-soft:#e5edfd; --violet:#7c3aed; --violet-soft:#f1eafd;
+    --fix:#ea580c;
+  }
+  *{box-sizing:border-box} html,body{margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font:15px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 80px}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:30px;margin:0 0 4px;color:var(--brand-ink)}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:14px}
+  .rulebar{background:var(--amber-soft);border:1px solid #ecd9b6;color:#7c4a08;border-radius:12px;
+    padding:10px 14px;font-size:13.5px;margin-bottom:18px}
+  .rulebar b{color:#5f3806}
+
+  /* controls */
+  .controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;
+    position:sticky;top:0;background:var(--paper);padding:10px 0;z-index:5;border-bottom:1px solid var(--line)}
+  button{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:10px;padding:8px 16px;cursor:pointer;transition:all .15s}
+  button:hover{border-color:var(--brand);color:var(--brand)}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  button.primary:hover{background:var(--brand-ink);color:#fff}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  .stepmeta{font-size:13px;color:var(--muted);margin-left:auto}
+
+  /* narration */
+  .narr{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--brand);
+    border-radius:12px;padding:12px 16px;margin:12px 0 18px;min-height:64px;font-size:14.5px}
+  .narr .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 8px;border-radius:99px;margin-bottom:6px}
+  .narr code{background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:12.5px}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media (max-width:900px){.cols{grid-template-columns:1fr}}
+
+  /* chat */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .panel h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    margin:0;padding:10px 16px;border-bottom:1px solid var(--line);background:#fdfcf9;display:flex;gap:8px;align-items:center}
+  .chat{padding:16px;min-height:420px;max-height:560px;overflow-y:auto}
+  .session-divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11.5px;
+    text-transform:uppercase;letter-spacing:.08em;margin:18px 0 12px}
+  .session-divider::before,.session-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+  .msg{max-width:88%;border-radius:14px;padding:9px 13px;margin:8px 0;font-size:13.8px;white-space:pre-wrap;
+    animation:pop .3s ease}
+  .msg.user{margin-left:auto;background:var(--brand-soft);border-bottom-right-radius:4px}
+  .msg.bot{background:var(--paper);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.bot .badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    padding:1.5px 7px;border-radius:99px;margin-bottom:6px}
+  .msg .hl{background:#fff3c9;border-radius:3px;padding:0 2px}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* stores */
+  .stores{display:flex;flex-direction:column;gap:14px}
+  .store{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;transition:box-shadow .3s}
+  .store.flash{box-shadow:0 0 0 3px rgba(14,110,92,.35)}
+  .store.flash-read{box-shadow:0 0 0 3px rgba(37,99,235,.35)}
+  .store h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0;padding:9px 14px;
+    border-bottom:1px solid var(--line);background:#fdfcf9;display:flex;align-items:center;gap:8px}
+  .store h3 .where{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:11px}
+  .store h3 .op{margin-left:auto;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:99px;opacity:0;transition:opacity .2s}
+  .store h3 .op.show{opacity:1}
+  .op.write{background:var(--brand);color:#fff} .op.read{background:var(--blue);color:#fff}
+  .store .body{padding:12px 14px;font-size:12.8px;min-height:44px}
+  .empty{color:var(--muted);font-style:italic}
+
+  /* working memory (pending json) */
+  .pending{font-family:ui-monospace,Menlo,monospace;font-size:11.8px;background:#0e1a17;color:#c9e8df;
+    border-radius:10px;padding:10px 12px;white-space:pre;overflow-x:auto;animation:pop .3s ease}
+  .pending .k{color:#7fd4c0}.pending .assumed{color:#ffd479}.pending .miss{color:#ff9d8a}
+  .pending-cleared{color:var(--muted);font-style:italic}
+
+  /* fact rows */
+  .fact{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);animation:pop .35s ease}
+  .fact:last-child{border-bottom:none}
+  .fact .fkey{font-family:ui-monospace,Menlo,monospace;font-size:11.3px;color:var(--muted);flex:0 0 168px}
+  .fact .fval{flex:1;font-weight:600}
+  .fact .fmeta{font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .confbar{flex:0 0 88px}
+  .confbar .track{height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+  .confbar .fill{height:100%;border-radius:99px;background:var(--brand);transition:width .7s ease, background .4s}
+  .confbar .num{font-size:10px;color:var(--muted);text-align:center;margin-top:2px}
+  .fact.stale .fill{background:var(--amber)} .fact.stale .fval{color:var(--muted)}
+  .fact .stalebadge{font-size:9.5px;color:var(--amber);font-weight:700}
+  .fact.updated .fval{animation:blink 1s ease}
+  @keyframes blink{0%,100%{background:transparent}30%{background:#fff3c9}}
+
+  .profile-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:13px}
+  .profile-grid .pk{color:var(--muted);font-size:11.5px}
+
+  /* legend + decay */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:10px}
+  .legend .dot{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:4px;vertical-align:baseline}
+  .decayrow{display:flex;align-items:center;gap:12px;margin-top:6px;font-size:12.5px;color:var(--muted)}
+  input[type=range]{accent-color:var(--brand);flex:1}
+  kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--surface);
+    padding:0 6px;font-size:11.5px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>How GSTPilot remembers you</h1>
+  <div class="sub">An interactive replay of a real two-session conversation (Phase 8c). Left: the chat. Right: the actual storage, updating exactly when the code updates it. Press <kbd>Next</kbd> or <kbd>→</kbd>.</div>
+  <div class="rulebar">⚖️ <b>The one non-negotiable rule:</b> memory sets <b>defaults &amp; context</b> — it never silently drives a rate, a number, or an eligibility answer. Anything remembered that would change an output is <b>shown with its origin and confirmed by you</b> before a calculator runs. Watch for the yellow <b>assumed</b> values below — they never reach a calculator un-confirmed.</div>
+
+  <div class="controls">
+    <button class="primary" id="next">Next step ▸</button>
+    <button id="auto">▶ Autoplay</button>
+    <button id="reset">↺ Reset</button>
+    <span class="stepmeta"><span id="stepnum">0</span> / <span id="steptotal"></span> · <span id="stepphase"></span></span>
+  </div>
+
+  <div class="narr" id="narr"><span class="tag" style="background:var(--brand-soft);color:var(--brand-ink)">START</span><div>Ye ek returning seller ki kahani hai — do sessions, ek hi user. Press <b>Next</b> to begin at sign-up.</div></div>
+
+  <div class="cols">
+    <div class="panel">
+      <h2>💬 The conversation</h2>
+      <div class="chat" id="chat"></div>
+    </div>
+
+    <div class="stores">
+      <div class="store" id="st-profile">
+        <h3>👤 Profile <span class="where">gstpilot_user_profile · sign-up + 2 onboarding Qs</span><span class="op" id="op-profile"></span></h3>
+        <div class="body" id="body-profile"><span class="empty">not signed up yet</span></div>
+      </div>
+
+      <div class="store" id="st-working">
+        <h3>⚡ Working memory <span class="where">gstpilot_threads.pending · THIS thread's live gather</span><span class="op" id="op-working"></span></h3>
+        <div class="body" id="body-working"><span class="empty">no gather in progress</span></div>
+      </div>
+
+      <div class="store" id="st-behavioral">
+        <h3>🧠 Behavioral memory <span class="where">gstpilot_user_memory · kind=behavioral · model-extracted, LOW trust</span><span class="op" id="op-behavioral"></span></h3>
+        <div class="body" id="body-behavioral"><span class="empty">nothing learned yet</span></div>
+      </div>
+
+      <div class="store" id="st-procedural">
+        <h3>🔁 Procedural memory <span class="where">gstpilot_user_memory · kind=default · YOUR confirmed shortcuts</span><span class="op" id="op-procedural"></span></h3>
+        <div class="body" id="body-procedural"><span class="empty">no confirmed defaults yet</span></div>
+      </div>
+
+      <div class="store">
+        <h3>⏳ Time &amp; decay <span class="where">effectiveConfidence() — trust halves every 60 unconfirmed days</span></h3>
+        <div class="body">
+          <div class="decayrow">
+            <span>today</span>
+            <input type="range" id="decay" min="0" max="180" value="0" step="5" disabled />
+            <span><b id="decaydays">+0</b> days later</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Unlocks at the last step — drag to fast-forward time. Below <b>25%</b> a fact turns <span style="color:var(--amber);font-weight:700">stale</span>: it stops being proposed and gets <i>re-asked</i>, never assumed.</div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><span class="dot" style="background:var(--brand)"></span>WRITE to store</span>
+        <span><span class="dot" style="background:var(--blue)"></span>READ from store</span>
+        <span><span class="dot" style="background:#ffd479"></span>assumed (shown, unconfirmed)</span>
+        <span><span class="dot" style="background:var(--amber)"></span>stale (decayed &lt; 25%)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- state ---------- */
+const S = {
+  profile:null, pending:null, behavioral:[], procedural:[], step:0, playing:false, decayUnlocked:false,
+};
+const $ = (id)=>document.getElementById(id);
+const chat = $("chat");
+
+/* ---------- render helpers ---------- */
+function flash(storeId, op){ // op: 'write' | 'read'
+  const store = $("st-"+storeId), badge = $("op-"+storeId);
+  if(!store) return;
+  store.classList.remove("flash","flash-read"); void store.offsetWidth;
+  store.classList.add(op==="read"?"flash-read":"flash");
+  if(badge){ badge.textContent=op.toUpperCase(); badge.className="op show "+op; }
+  setTimeout(()=>{ store.classList.remove("flash","flash-read"); if(badge) badge.classList.remove("show"); }, 1600);
+}
+function renderProfile(){
+  $("body-profile").innerHTML = !S.profile ? '<span class="empty">not signed up yet</span>' :
+    `<div class="profile-grid">
+       <span class="pk">email</span><span>${S.profile.email}</span>
+       <span class="pk">sells</span><span>${S.profile.sells??"<i style='color:var(--muted)'>—</i>"}</span>
+       <span class="pk">state</span><span>${S.profile.state??"<i style='color:var(--muted)'>—</i>"}</span>
+     </div>`;
+}
+function renderPending(){
+  const b = $("body-working");
+  if(S.pending===null){ b.innerHTML='<span class="empty">no gather in progress</span>'; return; }
+  if(S.pending==="cleared"){ b.innerHTML='<div class="pending-cleared">pending = null — calculator ran, gather CLEARED ✓</div>'; return; }
+  const p=S.pending;
+  const vals = Object.entries(p.values).map(([k,v])=>`    <span class="k">${k}</span>: ${JSON.stringify(v)}`).join(",\n");
+  const asm  = Object.entries(p.assumed).map(([k,v])=>`    <span class="assumed">${k}: ${JSON.stringify(v.value)}   ← ${v.why}</span>`).join(",\n");
+  const miss = p.missing.map(m=>`<span class="miss">"${m}"</span>`).join(", ");
+  b.innerHTML = `<div class="pending">{
+  <span class="k">tool</span>: "${p.tool}",
+  <span class="k">values</span> <i style="color:#6d8f87">(trusted — user-stated/confirmed)</i>: {
+${vals||"    "}
+  },
+  <span class="k">assumed</span> <i style="color:#b39144">(proposed from memory — NOT yet trusted)</i>: {
+${asm||"    "}
+  },
+  <span class="k">missing</span>: [${miss}]
+}</div>`;
+}
+function bar(conf, stale){
+  const pct = Math.round(conf*100);
+  return `<div class="confbar"><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="num">${pct}%</div></div>`;
+}
+function renderFacts(listId, rows){
+  const b = $("body-"+listId);
+  if(!rows.length){ b.innerHTML = `<span class="empty">${listId==="behavioral"?"nothing learned yet":"no confirmed defaults yet"}</span>`; return; }
+  const days = S.decayUnlocked ? +$("decay").value : 0;
+  b.innerHTML = rows.map(f=>{
+    const eff = f.conf * Math.pow(0.5, days/60);
+    const stale = eff < 0.25;
+    return `<div class="fact ${stale?"stale":""} ${f.justUpdated?"updated":""}">
+      <span class="fkey">${f.key}</span>
+      <span class="fval">${f.val}</span>
+      ${bar(eff)}
+      <span class="fmeta">${f.confirmed?"✓ confirmed":"unconfirmed"}${stale?' · <span class="stalebadge">STALE → re-ask</span>':""}</span>
+    </div>`;
+  }).join("");
+  rows.forEach(f=>f.justUpdated=false);
+}
+function renderAll(){ renderProfile(); renderPending(); renderFacts("behavioral",S.behavioral); renderFacts("procedural",S.procedural); }
+
+function addMsg(role, html, badge){
+  const d=document.createElement("div"); d.className="msg "+role;
+  d.innerHTML = (badge?`<span class="badge" style="background:${badge.bg};color:${badge.fg}">${badge.t}</span><br/>`:"")+html;
+  chat.appendChild(d); chat.scrollTop=chat.scrollHeight;
+}
+function addDivider(t){ const d=document.createElement("div"); d.className="session-divider"; d.textContent=t; chat.appendChild(d); }
+function narrate(tag,color,html){ $("narr").innerHTML=`<span class="tag" style="background:${color.bg};color:${color.fg}">${tag}</span><div>${html}</div>`; }
+const C={write:{bg:"var(--brand-soft)",fg:"var(--brand-ink)"},read:{bg:"var(--blue-soft)",fg:"var(--blue)"},
+         rule:{bg:"var(--amber-soft)",fg:"var(--amber)"},info:{bg:"var(--violet-soft)",fg:"var(--violet)"}};
+
+/* ---------- the script (each step = one function) ---------- */
+const STEPS = [
+ {phase:"Session 1 · sign-up", run(){
+   addDivider("SESSION 1 — a new user");
+   addMsg("user","anand@business.com — <i>Chalo</i>");
+   S.profile={email:"anand@business.com",sells:null,state:null}; renderProfile(); flash("profile","write");
+   narrate("WRITE · IDENTITY",C.write,"Email-as-id sign-up: one row in <code>gstpilot_user_profile</code>. No password (learning build). The <b>user_id</b> from this row is the key every memory hangs off.");
+ }},
+ {phase:"Session 1 · onboarding", run(){
+   addMsg("bot","Do chhote sawaal — aap kya bechte hain? Kaunse state mein hain?",{t:"onboarding",bg:"var(--brand-soft)",fg:"var(--brand-ink)"});
+   addMsg("user","footwear · Maharashtra");
+   S.profile.sells="footwear"; S.profile.state="Maharashtra"; renderProfile(); flash("profile","write");
+   narrate("WRITE · PROFILE",C.write,"Exactly <b>two</b> questions, never more — everything else is learned from conversation. A long upfront form is exactly the cold-stranger experience memory exists to kill.");
+ }},
+ {phase:"Session 1 · turn 1", run(){
+   addMsg("user","Main Amazon pe bechta hoon, monthly GSTR-3B file karta hoon, turnover 45 lakh hai. Late file karne pe kitni late fee lagegi?");
+   S.pending={tool:"gstr_late_fee",values:{return_type:"GSTR-3B",annual_turnover_inr:4500000},assumed:{},missing:["due_date","filing_date","nil_return"]};
+   renderPending(); flash("working","write");
+   narrate("WRITE · WORKING",C.write,"<code>fillSlots</code> (Haiku) extracts what you <i>stated</i> — return type &amp; turnover. The gather-in-progress is persisted as ONE structured object on the thread: <code>pending</code>. Next turn <b>resumes</b> from structure instead of re-reading raw chat.");
+ }},
+ {phase:"Session 1 · the cold ask", run(){
+   addMsg("bot","Late fee ₹50/day hai (nil pe ₹20/day), caps turnover pe… <b>[CGST-ACT/s47]</b>\n\nBas itni detail chahiye:\n- the due date\n- the date you filed\n- was it a nil return","+");
+   narrate("INFO · COLD ASK",C.info,"No memory exists yet, so this is Phase-8b behavior: the general cited rule + one bundled question for ONLY the gaps. Note: a <b>pure function</b> wrote this question from pre-written phrases — no LLM composes questions.");
+ }},
+ {phase:"Session 1 · memory extraction", run(){
+   S.behavioral=[
+     {key:"sells",val:"footwear",conf:.4,confirmed:false,justUpdated:true},
+     {key:"platforms",val:"Amazon",conf:.4,confirmed:false,justUpdated:true},
+     {key:"turnover_band",val:"45 lakh",conf:.4,confirmed:false,justUpdated:true},
+     {key:"filing_frequency",val:"monthly",conf:.4,confirmed:false,justUpdated:true}];
+   renderFacts("behavioral",S.behavioral); flash("behavioral","write");
+   narrate("WRITE · BEHAVIORAL",C.write,"AFTER the reply (fire-and-forget — memory must never slow an answer), a Haiku pass extracts durable facts from a <b>closed vocabulary</b>; code validates every key. They enter at <b>40%</b> — a model read them, no human verified them. Only YOUR confirmation can raise trust.");
+ }},
+ {phase:"Session 1 · turn 2 — resume & compute", run(){
+   addMsg("user","due 2026-06-20 thi, maine 2026-06-28 ko file kiya, nil nahi tha");
+   flash("working","read");
+   setTimeout(()=>{
+     addMsg("bot","Aapka GSTR-3B late fee: <b>₹400</b>.\n- 8 days × ₹50/day = ₹400 <b>[CGST-ACT/s47]</b>\nAapke diye numbers: due 2026-06-20, filed 2026-06-28, nil: nahi, turnover ₹45,00,000.",{t:"computed · cited",bg:"var(--brand-soft)",fg:"var(--brand-ink)"});
+     S.pending="cleared"; renderPending(); flash("working","write");
+   },500);
+   narrate("READ+WRITE · WORKING",C.read,"The thread's <code>pending</code> is READ (turnover &amp; return type carry over — you are NOT re-asked), this turn's slots merge in, all five slots present → the deterministic calculator runs → <code>pending</code> is CLEARED.");
+ }},
+ {phase:"Session 1 · defaults learned", run(){
+   S.procedural=[
+     {key:"default:…return_type",val:"GSTR-3B",conf:.9,confirmed:true,justUpdated:true},
+     {key:"default:…annual_turnover_inr",val:"₹45,00,000",conf:.9,confirmed:true,justUpdated:true},
+     {key:"default:…nil_return",val:"false",conf:.9,confirmed:true,justUpdated:true}];
+   renderFacts("procedural",S.procedural); flash("procedural","write");
+   narrate("WRITE · PROCEDURAL",C.write,"The calculator ran ⇒ every non-date slot was user-stated or confirmed ⇒ each becomes a per-user <b>default</b> at <b>90%</b>. Dates are per-case facts — never stored. This is the app learning <i>how this user usually does things</i>.");
+ }},
+ {phase:"Session 2 · the payoff", run(){
+   addDivider("SESSION 2 — days later, a NEW thread");
+   addMsg("user","late fee kitni hogi is baar?");
+   flash("profile","read"); flash("behavioral","read"); flash("procedural","read");
+   narrate("READ · ALL STORES",C.read,"A fresh thread, zero context — but <code>loadMemory(userId)</code> brings the profile + all facts (post-decay). <code>proposeDefaults</code> (a plain mapping, no model) finds it can pre-fill 3 of the 5 slots…");
+ }},
+ {phase:"Session 2 · CONFIRM, not ask", run(){
+   addMsg("bot","Aapke baare mein jo yaad hai, usse maan ke chal raha hoon:\n- <span class='hl'>which return: GSTR-3B</span> (pichhli baar confirm kiya tha)\n- <span class='hl'>nil return: nahi</span> (pichhli baar confirm kiya tha)\n- <span class='hl'>turnover: ₹45,00,000</span> (pichhli baar confirm kiya tha)\n\n<b>Sahi hai?</b> Saath mein bas: due date + filing date.",{t:"confirmation — not a cold ask",bg:"var(--amber-soft)",fg:"var(--amber)"});
+   S.pending={tool:"gstr_late_fee",values:{},assumed:{
+     return_type:{value:"GSTR-3B",why:"confirmed 2026-07-10"},
+     nil_return:{value:false,why:"confirmed 2026-07-10"},
+     annual_turnover_inr:{value:4500000,why:"confirmed 2026-07-10"}},missing:["due_date","filing_date"]};
+   renderPending(); flash("working","write");
+   narrate("THE RULE, ENFORCED",C.rule,"Five cold questions became a one-line confirmation — but look at <code>pending</code>: the remembered values sit in <span style='color:#b39144;font-weight:700'>assumed</span>, NOT in values. <b>The calculator refuses to run on an unconfirmed assumption.</b> The pause for your \"sahi hai?\" IS the verification system.");
+ }},
+ {phase:"Session 2 · a correction", run(){
+   addMsg("user","nahi — is baar <b>nil return tha</b>. Due 2026-07-20, file 2026-07-25 ko hui");
+   narrate("CODE, NOT MODEL",C.info,"<code>detectStance</code> (a regex) reads the reply. The \"nahi\" is <b>consumed by the explicit correction</b> (nil → true); the untouched assumptions (return type, turnover) keep implicit consent — you saw them and objected to one specific thing. A bare \"nahi\" would have dropped ALL assumptions and re-asked cold.");
+ }},
+ {phase:"Session 2 · compute on corrected values", run(){
+   addMsg("bot","Aapka GSTR-3B late fee: <b>₹100</b>.\n- 5 days × <b>₹20/day (nil rate)</b> = ₹100 <b>[CGST-ACT/s47]</b>\nAapke diye: due 2026-07-20, filed 2026-07-25, nil: <b>haan</b>, turnover ₹45,00,000.",{t:"computed · cited",bg:"var(--brand-soft)",fg:"var(--brand-ink)"});
+   S.pending="cleared"; renderPending();
+   S.procedural=S.procedural.map(f=>f.key==="default:…nil_return"?{...f,val:"true",justUpdated:true}:f);
+   S.behavioral=S.behavioral.map(f=>["sells","turnover_band"].includes(f.key)?{...f,conf:Math.min(.7,f.conf+.1)}:f);
+   renderFacts("procedural",S.procedural); renderFacts("behavioral",S.behavioral);
+   flash("procedural","write");
+   narrate("WRITE · CORRECTED",C.write,"Your correction won: ₹20/day nil rate, ₹100. The default updates to the LAST confirmed value (nil=true) — a known tradeoff for per-period facts. Re-stated behavioral facts nudge up (+10%, capped 70%): reinforcement, still below the human-confirmed 90%.");
+ }},
+ {phase:"Epilogue · decay", run(){
+   $("decay").disabled=false; S.decayUnlocked=true;
+   $("decay").parentElement.parentElement.parentElement.classList.add("flash");
+   narrate("TIME · DECAY",C.rule,"Drag the slider → every bar shrinks (confidence halves per 60 unconfirmed days). Below <b>25%</b> a fact goes <span style='color:var(--amber);font-weight:700'>STALE</span>: it stops being proposed and the app simply asks again. <b>Decay never deletes — it demotes.</b> A stale memory silently applied would be a confident wrong answer; this is the cheap defense. (You can also view/edit/delete everything at <code>/memory</code>.)");
+ }},
+];
+
+/* ---------- driver ---------- */
+$("steptotal").textContent=STEPS.length;
+function next(){
+  if(S.step>=STEPS.length) return;
+  const st=STEPS[S.step]; st.run();
+  S.step++; $("stepnum").textContent=S.step; $("stepphase").textContent=st.phase;
+  if(S.step>=STEPS.length){ $("next").disabled=true; $("next").textContent="Done ✓"; S.playing=false; $("auto").textContent="▶ Autoplay"; }
+}
+$("next").onclick=next;
+$("auto").onclick=()=>{
+  S.playing=!S.playing; $("auto").textContent=S.playing?"⏸ Pause":"▶ Autoplay";
+  (function tick(){ if(!S.playing) return; if(S.step>=STEPS.length){S.playing=false;$("auto").textContent="▶ Autoplay";return;}
+    next(); setTimeout(tick, 3600); })();
+};
+$("reset").onclick=()=>location.reload();
+$("decay").oninput=(e)=>{ $("decaydays").textContent="+"+e.target.value; renderFacts("behavioral",S.behavioral); renderFacts("procedural",S.procedural); };
+document.addEventListener("keydown",(e)=>{ if(e.key==="ArrowRight"){e.preventDefault();next();} });
+</script>
+</body>
+</html>
