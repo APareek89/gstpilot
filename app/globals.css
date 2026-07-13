@@ -1,26 +1,34 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* GSTPilot design tokens. The palette is deliberately "legal document, not dashboard":
+   warm paper instead of stark white, a deep trustworthy teal as the brand, ink text, and
+   three tier accents (calm teal → amber → rust) that map to T1 → T2 → T3 risk. A serif
+   wordmark gives the authority a law tool wants; body stays in the clean Geist sans. */
+@theme {
+  --color-paper: #f5f3ee;
+  --color-surface: #ffffff;
+  --color-line: #e6e1d6;
+  --color-ink: #211f1a;
+  --color-muted: #7a746a;
+  --color-brand: #0e5f52;
+  --color-brand-ink: #0a4b40;
+  --color-brand-soft: #e4f0ec;
+  --color-amber: #8f5e12;
+  --color-amber-soft: #f6ecd6;
+  --color-rust: #9c3a2c;
+  --color-rust-soft: #f4e5e1;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+:root { color-scheme: light; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+
+::selection { background: var(--color-brand-soft); color: var(--color-brand-ink); }

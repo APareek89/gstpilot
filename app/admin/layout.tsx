@@ -12,6 +12,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Link href="/admin/playground" className="text-indigo-600 hover:underline">Playground</Link>
         <Link href="/admin/traces" className="text-indigo-600 hover:underline">Traces</Link>
         <Link href="/admin/evals" className="text-indigo-600 hover:underline">Evals</Link>
+        <Link href="/admin/conversations" className="text-indigo-600 hover:underline">Conversations</Link>
+        <Link href="/admin/triage" className="text-indigo-600 hover:underline font-semibold">Triage → Golden</Link>
+        <Link href="/admin/architecture" className="text-indigo-600 hover:underline">Architecture ▸</Link>
       </nav>
       {children}
     </div>

@@ -1,5 +1,233 @@
 # GSTPilot — Learning Log
 
+## Session 8c — 2026-07-10 (Phase 8c: agent memory + lightweight sign-up — ask → CONFIRM)
+
+**Why this session:** the app re-met a stranger on every message. Every turn re-derived everything
+from raw chat text; a returning seller was asked the same five questions forever. Goal: recognise a
+returning user, stop asking what we already know, and turn cold questions into warm confirmations —
+WITHOUT ever letting a remembered (possibly stale) fact silently drive a legal number.
+
+**What we built (5 checkpoints, verified by RUNNING the app across two sessions — no evals):**
+1. **Identity** — email-as-id sign-up (no password), 2-question onboarding (sells, state), user_id on
+   threads and on the Langfuse trace. Migration 0010: `user_profile`, `threads.user_id/pending`,
+   `user_memory` (fact · value · confidence · provenance · as_of · last_confirmed · kind).
+2. **WORKING memory** — the Phase-8b SlotFill persisted as ONE `pending` object on the thread
+   ({tool, values, assumed, missing, rejected}); a clarification now RESUMES from structure instead of
+   re-reading 20 turns. Cleared on compute; 6h TTL.
+3. **BEHAVIORAL memory** — a new Haiku agent (`lib/memory/extract.ts`) runs AFTER each reply
+   (fire-and-forget, a node on the same pipeline trace) and upserts durable facts from a CLOSED set;
+   code validates the keys. Injected before each turn in 3 places: intake context, retrieval-rewrite
+   hint, slot pre-fill. Never merged into the context fillSlots reads.
+4. **CONFIRM-not-ask + PROCEDURAL defaults** — missing slots consult memory (`prefill.ts`,
+   deterministic mapping) and become SHOWN assumptions with origin + date ("aapne pichhli baar confirm
+   kiya tha, 2026-07-10 — sahi hai?"); the calculator refuses to run on an unconfirmed assumption.
+   "haan"/answering-the-gaps graduates them; an explicit correction wins and consumes a "nahi"; a bare
+   "nahi" drops ALL assumptions (safe direction). On compute, every non-date slot becomes a per-user
+   default (kind='default', 0.9) — next month's cold ask is a one-line confirm.
+5. **"Jo mujhe yaad hai" panel + hygiene** — /memory shows every fact with post-decay confidence and
+   as-of date; edit (= strongest confirmation) and delete. Confidence halves every 60 unconfirmed days;
+   below 0.25 a fact stops being proposed and gets re-asked.
+
+**3 key concepts:**
+1. **Three memory types, three lifetimes.** WORKING = this conversation's live state (minutes, on the
+   thread); BEHAVIORAL = observed facts about the person (weeks, low-trust until confirmed);
+   PROCEDURAL = confirmed shortcuts (durable, high-trust, decaying). Collapsing them into one blob is
+   how agents end up "remembering" a guess as a fact — the `kind` column and the confidence ladder
+   (0.4 extract → +0.1 reinforce → 0.9 human-confirm → halve/60d) keep provenance attached to trust.
+2. **The confirmation UX IS the verification.** We never built a memory-verification pipeline —
+   instead every consequential remembered fact must pass through a human "sahi hai?" before it touches
+   a number. Model proposes (extraction, pre-fill), code disposes (detectStance regex, buildConfirmation
+   pure function, prefill mapping) — an LLM never invents a memory key, writes the confirmation text, or
+   decides that an assumption was accepted.
+3. **A stale/wrong memory is a confident wrong answer — and we watched it happen.** The extractor once
+   stored filing_frequency="quarterly" for a user who said "monthly" (a real hallucination in testing).
+   Every defense fired: it entered at 0.4 (not trusted), it could only ever surface as a SHOWN
+   assumption, and the panel deleted it in one click. That's the design working, not luck — plan for
+   wrong memories, don't hope against them.
+
+**Most likely to break later:** `detectStance` + the negation-attribution rule are regex/heuristics
+fitted to Hinglish yes/no replies. A phrasing they misread ("theek nahi hai" reads affirm+negate) can
+mis-graduate an assumption — the blast radius is bounded (the assumption was SHOWN on screen and the
+reply echoes every input: "Galat ho to sahi bata dein"), but watch feedback for "maine to nahi bola
+tha". Second: `rememberAllDefaults` learns per-period facts (nil_return) as durable defaults — they
+flip-flop between confirmations; if that annoys users, exclude nil_return from default-writing.
+
+**Session 8c addendum (same day) — the wrongful-T3 fix + the GUIDANCE lane.** Anand's dogfooding
+found "description mein kya likhna hai, ek example do" escalated to a CA. Root cause was a
+TAXONOMY HOLE, not risk logic: INTENTS had no home for benign how-to questions, so the classifier
+borrowed the lane word "procedure" as an intent → zod rejected it → temperature-0 retry produced
+the identical output → double failure → the deliberate fail-UP default sent it to T3. Fix in three
+layers: a `general_guidance` intent (give benign questions a home) · `repairIntake()` (deterministic
+vocabulary repair before zod — but the TIER field is never repaired; risk still fails up) · a new
+GUIDANCE lane that answers drafting/wording help directly with hard no-numbers rules, a G6 regex
+that strips any rate/amount/section that slips out, and a code-appended disclaimer. **Lesson 1:
+fail-up defaults amplify upstream schema gaps** — when the safe fallback is drastic (a CA
+escalation), every hole in the happy path funnels into it; watch WHAT lands in the fallback, not
+just that it exists. **Lesson 2: at temperature 0, "retry once" is not a second opinion** — the
+same prompt gives the same wrong output; a retry only helps if something changes (repair the output
+in code, or vary the ask). **Lesson 3 (from the same hour): a permissive lane over-triggers
+immediately** — "how do i get a GST refund" rode the uncited guidance lane on its first outing;
+the deterministic SUBSTANTIVE-keyword guard in reconcileLane pulls law questions back to the cited
+path. Un-rigid where facts aren't needed, rigid wherever they are.
+
+**⚠️ HUMAN TASKS (Anand):**
+- Real sign-in before ANY real user: magic-link (prove inbox ownership) + an explicit consent screen.
+  Today anyone typing an email BECOMES that user and can read their memory panel.
+- `user_memory` is business PII (turnover, platforms, state): decide retention + deletion policy and
+  check Supabase encryption posture before real sellers touch it.
+- Carry-over from 8b: verify the model-compiled rate table against source PDFs; fix nvm default → 22.
+
+## Session 8 — 2026-07-09 (Phase 8b: make it actually WORK — the third move, router→lanes, rate table, gate loosening)
+
+**Why this session:** the app abstained on things it should handle — "what is the late fee for GST
+filing" (we HAVE the calculator, but the question had no params), "edible oil ka gst" (rate buried in
+a giant schedule chunk), "footwear rate changes in 6 months" (temporal, unhandled). Root causes: the
+agent had only TWO moves (answer/abstain), one rigid retrieve→generate pipe, rates as unstructured
+prose, and an all-or-nothing citation gate that suppressed nearly every RAG answer.
+
+**What we built (6 pieces, verified by running the app — no evals this session):**
+1. **The third move — ASK.** `lib/agents/clarify.ts`: reads a tool's required-input SCHEMA
+   (`lib/tools/registry.ts`), extracts whatever the conversation already gave, and asks ONE bundled
+   friendly question (with options) for the gaps instead of abstaining. Multi-turn carry-back rides
+   the existing thread context.
+2. **Router → lanes.** Intake now also classifies the question's LANE (rate_lookup · calculation ·
+   procedure · eligibility · change_over_time · escalate · out_of_scope) in the same G1-guarded call.
+   `reconcileLane` trusts a specific model pick and only overrides the weak defaults; `pickCalcTool`
+   + `toolFits` pick the right tool per lane. Each lane returns a `LaneOutcome`; the rest fall through
+   to the unchanged RAG path. Safety bars intact (T3 escalates first).
+3. **Rate table + `lookup_rate`.** `lib/rates/`: rates as structured FACTS (item/HSN → rate + price
+   condition + source notif id + effective_date), model-compiled from the notifications. Lookup is
+   language-agnostic (Hindi item words resolve via synonyms/model-in-closed-set), pre-cited (carries
+   its own chunk id), and asks the price-threshold question for conditional items (footwear ≤/>₹2500).
+4. **Calculators.** A safe general-arithmetic dispatcher (closed op set, NO eval, NO citation — just
+   math on the user's own numbers), plus typed `registrationThreshold` (s22/s24) and export-refund
+   `refundExportRule89` (Rule 89(4)). All exposed to the RAG tool loop; the understanding layer now
+   resolves relative dates ("5 days back", "today", "kal") and word-amounts ("10 crore") — the extractor
+   finally has a clock.
+5. **Gate loosening.** `pruneUngrounded` in verify-citations.ts: drop ONLY the untagged/fake-cited
+   sentence and keep the cited remainder, abstaining fully only if nothing grounded survives. Kept the
+   hard anti-hallucination bar (invented citations never ship). This un-suppressed the whole RAG lane.
+6. **Change-over-time lane (bounded).** Retrieves dated notifications/circulars, sorts by government
+   release date (`effective_date`, populated on all 1064 chunks), filters to the asked window, and
+   narrates a cited timeline ONLY when ≥2 dated docs exist — else honest "one doc" / "no change I can
+   see". Seeded with the rate-table anchor so a rate topic lands on the right notification.
+
+**3 key concepts:** (1) **A third move changes the product.** answer/abstain → answer/**ASK**/abstain.
+And the ASK is derived from the tool's required-input schema, so every tool you add teaches the ASK
+move for free — you never hand-write "what to ask". (2) **Facts vs passages.** A rate/threshold is a
+FACT you look up, not a passage you fish out of prose. Making it a pre-cited lookup fixes THREE things
+at once — the Hindi-vs-English inconsistency (lookup is language-agnostic), the buried-rate dilution
+(the number isn't retrieved), and the gate over-abstention (a pre-cited fact can't trip the gate).
+(3) **Gentle enforcement beats all-or-nothing.** Dropping the one bad sentence keeps every safety
+guarantee while unblocking the good answer. Same spirit runs through the router ("trust a specific
+model pick; model proposes from a CLOSED list, code disposes") — hard where it must be, forgiving
+where it can be.
+
+**Most likely to break later:** the **rate table is model-compiled and UNVERIFIED** — a wrong rate is
+exactly the "confident false answer" the brief forbids. It's mitigated (every rate is cited + carries
+a "confirm on the notification" hedge + `verified:false`), but the real fix is a human sitting with the
+source PDFs (⚠️ below). Second: the lane router leans on the intake's lane label; a model drift could
+misroute (guarded by `reconcileLane` + `toolFits`, but watch the router notes in the trajectory).
+
+**⚠️ HUMAN TASKS (Anand):**
+- [ ] **Verify the rate table** (`lib/rates/table.ts`) against the source rate notifications; flip
+  `verified` to true per row (or correct the rate/threshold/citation). It's model-compiled for now.
+- [ ] **Preview tooling:** the Claude preview MCP can't launch the server — it runs `pnpm` via corepack
+  under Node 18, which crashes ("Invalid host defined options"). I ran the dev server manually on
+  :3210 with Node 22 (`node node_modules/next/dist/bin/next dev -p 3210`). Fix: set nvm default to 22
+  or pin the launch command to a Node-22 `next` binary so preview screenshots work again.
+- [ ] (Optional) The `refund_export_rule89` tool exists but sonnet sometimes explains the formula
+  instead of calling it — a stronger prompt nudge would make it compute the number.
+
+### Session 8 addendum (same day) — post-test-ride fixes (Anand dogfooding at :3210)
+
+**Fixed (in code, verified by running the app):**
+1. **Intake resilience — a transient API blip was silently escalating routine questions to a CA.**
+   `classifyIntake`'s bare `catch {}` treated a network/overload error the same as bad-JSON output;
+   after two tries it defaulted to T3 with "intake failed twice". Fix: distinguish transient
+   (429/5xx/network) from parse failures — retry transient with backoff, and if the *service* stays
+   down return a `serviceError` so the pipeline shows an honest "try again" instead of a fake
+   escalation. Also bumped intake `max_tokens` 200→300 (the added `lane` field made JSON longer).
+2. **Langfuse trace links 404'd.** The UI built a bare `…/traces/<id>`; Langfuse Cloud needs
+   `…/project/<projectId>/traces/<id>`. Fix: `getLangfuseProjectId()` fetches the id via the public
+   API (existing keys, cached) — no manual env step. `/admin/{conversations,triage}` link correctly now.
+3. **Langfuse trace structure — one turn was two disconnected traces, no visible nodes, no session.**
+   Fix: `sessionId = threadId` (groups a conversation's turns into one Langfuse Session);
+   `answerQuestion` now nests under the pipeline trace (killed the stray "answer" trace → one trace
+   per turn); every model call wrapped as a `recordGeneration` node so the tree (intake · transform ·
+   sonnet-generation · fill-slots · reply · G5) is visible with token usage. Verified via the API:
+   sessionId present, 2 traces for 2 turns (not 4), generation nodes nested under `resolution`.
+
+4. **"100 crore" was echoed as ₹10,00,00,00,000 (1000 crore).** Root cause: the slot extractor
+   PROMPT told Haiku to *expand* crore/lakh to digits — and Haiku miscounts zeros on big numbers.
+   Fix (the principle, not a bigger model): tell the model to copy the amount VERBATIM ("100 crore")
+   and let `validate()` do `100 × 10^7` deterministically — model proposes, code disposes. Verified
+   across 100 crore / 40 lakh / 1.5 crore / ₹1,50,000 / 2.5 cr. **Takeaway: don't reach for Sonnet to
+   fix arithmetic — take the arithmetic out of the model.**
+5. **Langfuse "no traces today" / "Trace not found".** Two causes: (a) the dev server had run since
+   the previous evening and hot-reloaded through today's `langfuse.ts` rewrite, resetting the
+   module-level client so traces got ids but never flushed; (b) Langfuse Hobby-tier ingestion lags
+   ~30–60s (the "still being processed" message). Fix: pin the client to `globalThis` so hot-reloads
+   reuse ONE client, and restart the dev server fresh. Verified: new chats ingest (pipeline trace +
+   sessionId + generation nodes) after the tier's lag.
+6. **"N shoes, kitna GST" mis-guessed the price tier.** The rate lane's `resolveConditionSide` read
+   the *quantity* "10000" as a per-unit *price* (>₹2,500 → 18%). Fix: the prompt now states a
+   quantity is NOT a price → returns "unknown" → the lane ASKS the per-pair price instead of guessing.
+   Verified it now asks; plain "footwear ka gst" unregressed.
+
+**Known-open (logged to fix later, NOT yet fixed):**
+- [ ] **Total GST on a quantity.** After #6 it correctly ASKS the per-unit price, but once the price
+  is given it still doesn't compute `quantity × price × rate` (the full total). Needs a composite
+  goods-GST flow (resolve item → get qty + price → rate from table → multiply, pre-cited).
+- [ ] **English-vs-Hinglish for the RAG (non-rate) lanes.** The rate table made *rate* lookups
+  language-agnostic, but RAG still searches only the English rewrite/HyDE — it never embeds the raw
+  Hindi query, wasting bge-m3's multilingual strength. Lever: add the raw query as a second dense
+  probe. **Deliberately NOT applied blind** — it changes the RRF fusion inputs and could silently
+  degrade all retrieval; it needs a before/after retrieval check (an eval), which this phase skips.
+
+
+## Session 7 — 2026-07-08 (Phase 8: retrieval fix · eval stability · the self-improvement flywheel · UI)
+
+**What we built:** (1) **eval cost + stability** — a 30-case curated sample (`EVAL_SAMPLE`, keeps ALL
+18 fact cases so fact_match stays comparable) at ~half the spend, and N-run mean-pass-rate
+(`EVAL_REPEAT=3`) so fact_match stops swinging ±2/18. (2) **retrieval fix for the refund miss** —
+root-caused the giant-chunk truncation (the 6,000-char embed cap was an OOM *workaround*, not a
+model limit; bge-m3 takes 8,192 tokens) → **embed-whole** (adaptive batch, giants solo, a size
+tripwire that flagged s2 at 31.5k), widened the generation source cap 4,500→12,000, and an
+**intent-conditional doc-type boost** in fusion (statute-anchored queries lift Act/Rules; rate
+queries untouched — verified no regression). (3) **the Phase-8 flywheel** — `lib/golden/{append,
+predraft}`, `app/admin/triage` (👎 → Haiku pre-draft → ⚠️ human approve → golden append + version
+bump), CI (`.github/workflows/ci.yml`: 25-case smoke asserting the absolute gates as a hard PR
+block + nightly full suite + Langfuse experiment), and `docs/{DASHBOARD,MODEL_CHANGE}.md`. (4) **UI
+redesign** (warm-paper/teal/serif, empty-state chips, quoted-snippet citation cards, tier badges)
+and a `[SOURCE-ID]` placeholder-leak fix.
+
+**The turning point (honest):** the retrieval fix is real at the *retrieval* level — s54 climbed
+dense #15 → #2 and reached the agent (fused #2), 5/8 statute — but the golden eval showed fact_match
+FLAT/down, and the diagnostic explained why: (a) the eval is **flaky** — 1/18 in the eval vs 3/18 in
+the diagnostic on *identical code* (fact_match is ±2 noise at this granularity), and (b) the dominant
+fact_match blocker is the **citation gate force-abstaining** (~11/18 answers end in the 101-char
+abstention), NOT retrieval. The fix targeted a class (refund) the fact cases barely cover. Retrieval
+work is correct and stays; the real levers are eval-stability (done) then the gate (next).
+
+**3 key concepts:** (1) **root cause beats the directed fix** — "split the giant chunks at sub-rule
+boundaries" was the plan, but the OCR made clean splits fragile, and the *actual* root cause was an
+unnecessary truncation. Removing it (embed-whole) was simpler and safer. Let the evidence overrule
+the plan, out loud. (2) **isolate changes, or pay when something breaks** — bundling embed-whole +
+gen-cap + boost into one eval meant the (noise) regression couldn't be cleanly attributed; the
+"isolate what worked" rule earns its keep exactly when a number moves the wrong way. (3) **failures
+are assets; a static golden set depreciates** — reality (law, phrasings, models) keeps moving, so a
+frozen test set tests yesterday's product. The flywheel turns each production 👎 into a permanent
+regression test. Labels that feed zero-tolerance gates must be human-verified — a wrong label teaches
+the gate to enforce a wrong answer.
+
+**Most likely to break later:** the CI smoke runs the real pipeline on GitHub runners — it needs
+bge-m3 downloaded (~600MB, cached), all five secrets set, and NO corp-CA path; if it goes red on
+infra rather than a real gate, it reads like a product regression. And until the **gate
+over-abstention** is fixed, fact_match stays ~0.1–0.15 no matter how good retrieval gets — that's the
+next session's #1 lever.
+
+
 ## Session 6 — 2026-07-07 (Phase 5: first full question→answer path)
 
 **What we built:** lib/agents/answer.ts (transform+HyDE → hybrid retrieval → pinned claude-sonnet-4-6 with calculator tools → citation gate → named-errors regeneration → forced abstention), lib/gates/verify-citations.ts, lib/calculators/ (late fee + s50 interest as pure functions returning their own legal-basis citations), Langfuse tracing on every answer, full-path eval (pnpm eval:answer).

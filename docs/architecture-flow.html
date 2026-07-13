@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GSTPilot — Architecture Flow</title>
+<style>
+  :root { --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --accent:#1F5C46; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink);
+         max-width: 1100px; margin: 0 auto; padding: 28px 22px 80px; line-height: 1.55; background:#fafafa; }
+  h1 { color: var(--accent); border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+  h2 { color: var(--accent); margin-top: 40px; border-top: 1px solid var(--line); padding-top: 20px; }
+  blockquote { background:#f0f5f2; border-left:4px solid var(--accent); margin:0 0 20px; padding:10px 16px; color:#374151; border-radius:4px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; font-size: 14px; background:#fff; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--accent); color: #fff; }
+  tr:nth-child(even) td { background: #f6f8f7; }
+  code { background:#eef2f0; padding:1px 5px; border-radius:4px; font-size:.9em; }
+  pre.mermaid { background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px; margin:16px 0 28px;
+                overflow:auto; text-align:center; }
+  .hint { position:sticky; top:0; background:#fff8e1; border:1px solid #f0d264; border-radius:6px; padding:8px 12px;
+          font-size:13px; color:#5a4a00; margin-bottom:16px; z-index:5; }
+  .mermaid svg { max-width:100%; height:auto; }
+</style>
+</head>
+<body>
+<div class="hint">Tip: use <b>Ctrl/Cmd + scroll</b> or the browser zoom to enlarge a diagram. Diagrams render below their headings.</div>
+<div id="content"></div>
+
+<script type="text/markdown" id="src">
+# GSTPilot — Architecture Flow (visual, for debugging)
+
+> Built so a non-engineer can trace what happens without reading code. **Every box is ONE step** and tells you: is it an **AGENT** (an LLM decides) or a **FUNCTION** (plain code) · its **in:** (what goes in) · its **out:** (what comes out). Data flows box → box. When something misbehaves, find the box and open its file (index at the bottom).
+
+## Legend
+
+| Colour | Meaning |
+|---|---|
+| **blue** | **AGENT** — an LLM (Haiku or Sonnet) does this step |
+| **green** | **FUNCTION** — our deterministic TypeScript, no model |
+| **teal** | a **question back to you** (the clarification / ASK) |
+| **purple diamond** | a **decision** (who decides is on the box) |
+| **grey** | a **result** (answer / abstain / escalate) |
+| **lilac** | **data / library** (Supabase · rate table · bge-m3) |
+
+Read each box as: **NAME · [AGENT/FUNCTION] · in: … · out: …**
+
+---
+
+## 1 · MASTER FLOW — one question, end to end (incl. the clarification loop)
+
+```mermaid
+flowchart TD
+  U(["YOU: a question<br/>'footwear ka gst kitna hai'"]):::term --> API
+
+  API["API ENTRY<br/>FUNCTION · app/api/ask/route.ts<br/>in: your question (+ threadId)<br/>out: question + CONTEXT (last-20-turns + summary = MEMORY)"]:::fn --> INTAKE
+
+  INTAKE["INTAKE — classify<br/>AGENT · Haiku · intake.ts<br/>in: question + context<br/>out: intent, tier, lane"]:::agent --> G1{"valid output?<br/>FUNCTION · zod parse"}:::dec
+
+  G1 -->|"API kept failing (transient)"| SVC["serviceError<br/>FUNCTION · out: 'service busy, try again'"]:::term
+  G1 -->|"output malformed x2"| CA
+  G1 -->|"ok"| T3{"tier == T3?<br/>FUNCTION · a live dispute?"}:::dec
+
+  T3 -->|"yes"| CA["CA HANDOFF<br/>FUNCTION · caHandoff()<br/>in: question · out: summary for a human CA<br/>(malformed lands here too: risk unknown = fail-safe)"]:::term
+  T3 -->|"no"| ROUTER["ROUTER<br/>FUNCTION (NO model) · reconcileLane()<br/>in: intent + lane · out: the chosen lane"]:::fn
+
+  ROUTER --> LANE{"which lane?"}:::dec
+  LANE -->|"calculation"| CALC["CALCULATION lane<br/>(diagram 2)"]:::fn
+  LANE -->|"rate_lookup"| RATE["RATE lane<br/>(diagram 3)"]:::fn
+  LANE -->|"change_over_time"| TIME["TIMELINE lane<br/>(diagram 4)"]:::fn
+  LANE -->|"procedure / eligibility /<br/>refund / out_of_scope"| RAG["RAG path<br/>(diagram 5)"]:::fn
+
+  CALC --> OUTCOME{"lane result?"}:::dec
+  RATE --> OUTCOME
+  TIME --> OUTCOME
+  RAG --> OUTCOME
+
+  OUTCOME -->|"has everything it needs"| ANS["CITED ANSWER<br/>out: answer + source cards"]:::term
+  OUTCOME -->|"sources don't cover it"| AB["HONEST ABSTAIN"]:::term
+  OUTCOME -->|"a required input is MISSING"| ASK["CLARIFYING QUESTION — the ASK move<br/>built by a FUNCTION from pre-written phrases (NO LLM writes it)<br/>out: ONE question back to you, e.g. 'per-pair price 2500 se kam ya zyada?'"]:::ask
+
+  ANS --> OUT2["OUTPUT<br/>FUNCTION · route.ts<br/>in: answer · out: source cards + saved msg + streamed to chat"]:::fn
+  OUT2 --> DONE(["shown in your chat"]):::term
+  ASK --> DONE
+
+  %% ---- THE CLARIFICATION LOOP: how the agent 'asks' across turns ----
+  DONE -.->|"YOU type the answer in the NEXT message"| U2(["YOU: '800 per pair'"]):::term
+  U2 -.->|"SAME thread → API buildContext() adds the prior turn as MEMORY,<br/>so the lane now finds the missing input and computes"| API
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;
+```
+
+> **How the ASK works (plain):** a lane that's missing an input doesn't guess — it returns a **question** as its reply. That question is shown in chat. When **you answer in the next message**, the API's `buildContext()` re-sends the *previous* turn as memory, so on this second pass the same lane finds the value and computes. No special state machine — the thread memory carries it.
+>
+> **Who actually writes the question? A FUNCTION, not an LLM.** The model (`fillSlots`) only *extracts* what you already gave and *flags* which required inputs are missing. A separate FUNCTION (`buildClarification`, or the rate table's stored `ask` line) then stitches the **pre-written `ask` phrases** from the tool's schema (`registry.ts`) into one message. So the wording is deterministic and reviewable — the LLM never composes the question.
+
+---
+
+## 2 · CALCULATION lane — extract, then compute (agent vs code kept separate)
+
+```mermaid
+flowchart TD
+  IN(["from router:<br/>your calculation question"]):::term --> PICK
+
+  PICK["pickCalcTool<br/>FUNCTION · lanes.ts<br/>in: question + intent<br/>out: tool name (late_fee | interest | registration)"]:::fn --> FIT{"toolFits?<br/>FUNCTION · does a legal calculator match?"}:::dec
+
+  %% ---- branch A: no calculator fits ----
+  FIT -->|"no"| EX["extract the math<br/>AGENT · Haiku · tryGeneralMath()<br/>in: question<br/>out: op + values  OR  'none'"]:::agent
+  EX --> ISMATH{"is it math?<br/>FUNCTION"}:::dec
+  ISMATH -->|"yes (op + values)"| ARITH["do the arithmetic<br/>FUNCTION · generalArithmetic() safe dispatcher, NO eval<br/>in: op + values<br/>out: EXACT number (NO citation — it's just math)"]:::fn
+  ISMATH -->|"no"| TORAG(["not a calculation<br/>-> hand to RAG path"]):::term
+  ARITH --> R1(["result: the number"]):::term
+
+  %% ---- branch B: a calculator fits ----
+  FIT -->|"yes"| FILL["extract the inputs<br/>AGENT · Haiku · fillSlots() · clarify.ts<br/>in: question + context + tool SCHEMA<br/>out: raw slot values (amounts copied VERBATIM)"]:::agent
+  FILL --> VAL["validate + expand<br/>FUNCTION · validate() · clarify.ts<br/>in: raw values<br/>out: clean values (crore/lakh expanded IN CODE, not by Haiku)"]:::fn
+  VAL --> MISS{"required slot missing?<br/>FUNCTION"}:::dec
+  MISS -->|"yes"| ASK["build the clarifying question — the ASK<br/>FUNCTION · buildClarification() — NO LLM writes this<br/>in: missing slots + their pre-written 'ask' text (registry.ts)<br/>out: ONE bundled question, assembled from templates by CODE"]:::ask
+  MISS -->|"no"| CALC["run the calculator<br/>FUNCTION · calculators/index.ts<br/>in: clean values<br/>out: EXACT number + its OWN citations"]:::fn
+  ASK --> R2(["out: a question back to you"]):::term
+  CALC --> R3(["out: cited answer + echoes your inputs"]):::term
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+```
+
+> **Your question, answered:** when no legal calculator fits, **Haiku does NOT do the math** — it only *extracts* `op + values` (e.g. `percent_of, [18, 50000]`); the actual number is computed by **`generalArithmetic` (FUNCTION, no `eval`)**. And if the model says it isn't a calculation at all → it drops to the **RAG path**. Extract (agent) and compute (code) are two separate boxes on purpose.
+>
+> **And the ASK is the same split:** `fillSlots` (AGENT) extracts + finds the missing inputs; `buildClarification` (FUNCTION) writes the question from the schema's pre-written phrases. **No LLM composes the question.**
+
+---
+
+## 3 · RATE lane — find the item, then the pre-cited rate
+
+```mermaid
+flowchart TD
+  IN(["from router:<br/>'X ka gst kitna hai'"]):::term --> SYN
+
+  SYN["match by synonym<br/>FUNCTION · findBySynonym() · rates/table.ts<br/>in: question words (English/Hindi)<br/>out: item OR nothing"]:::fn --> HIT{"matched?<br/>FUNCTION"}:::dec
+  HIT -->|"no"| MODEL["ask the model to pick<br/>AGENT · Haiku · resolveItem()<br/>in: question + CLOSED item list<br/>out: one item OR 'none' (can't invent)"]:::agent
+  HIT -->|"yes"| LOOK
+  MODEL --> INTBL{"item in table?<br/>FUNCTION"}:::dec
+  INTBL -->|"no"| AB["honest abstain<br/>out: 'not in my rate table'"]:::term
+  INTBL -->|"yes"| LOOK["look up the rate<br/>FUNCTION reads RATE_TABLE (data)<br/>in: item<br/>out: a flat rate OR 'rate depends on price'"]:::fn
+
+  LOOK --> COND{"price-conditional?<br/>FUNCTION · footwear/apparel"}:::dec
+  COND -->|"flat"| ANS["out: 'X% · Notification id · effective date' + source card"]:::term
+  COND -->|"conditional"| SIDE["read which side of the price threshold<br/>AGENT · Haiku · resolveConditionSide()<br/>in: the conversation<br/>out: below / above / unknown (a QUANTITY is not a price)"]:::agent
+  SIDE --> KNOWN{"price side known?<br/>FUNCTION"}:::dec
+  KNOWN -->|"yes"| ANS
+  KNOWN -->|"no"| ASK["ASK the price — clarification<br/>FUNCTION · returns the pre-written 'ask' from the rate table — NO LLM writes it<br/>out: 'per-pair price 2500 se kam ya zyada?'"]:::ask
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+```
+
+---
+
+## 4 · TIMELINE lane — change-over-time (bounded & honest)
+
+```mermaid
+flowchart TD
+  IN(["from router:<br/>'footwear rate change in 6 months?'"]):::term --> WIN
+
+  WIN["read the time window<br/>FUNCTION · parseWindowMonths() (regex)<br/>in: question<br/>out: N months (default 24)"]:::fn --> SEARCH["find dated documents<br/>FUNCTION + LIBRARY(Supabase)<br/>in: question<br/>out: notifications/circulars with a release date"]:::fn
+  SEARCH --> SEED["add the rate-table anchor<br/>FUNCTION<br/>in: item<br/>out: + its governing notification (dated)"]:::fn
+  SEED --> COUNT{"how many DATED docs in the window?<br/>FUNCTION"}:::dec
+
+  COUNT -->|">= 2"| TL["out: TIMELINE — dates + citations, old to new<br/>(the ONLY case it may claim a 'change')"]:::term
+  COUNT -->|"exactly 1"| ONE["out: 'just this one doc'"]:::term
+  COUNT -->|"0, but topic held"| NC["out: 'no change in that window' + latest doc"]:::term
+  COUNT -->|"none"| INS["out: abstain — won't fabricate a timeline"]:::term
+
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+```
+
+---
+
+## 5 · RAG path + gates — grounded answer, checked at each step
+
+```mermaid
+flowchart TD
+  IN(["from router:<br/>a how-to / eligibility question"]):::term --> TR
+
+  TR["rewrite for search<br/>AGENT · Haiku · transformQuery() · transform.ts<br/>in: question (Hinglish ok)<br/>out: English rewrite + HyDE (a fake answer to search with)"]:::agent --> SEARCH["hybrid search<br/>FUNCTION + LIBRARY<br/>in: rewrite + HyDE<br/>out: TOP 8 chunks (dense bge-m3 + keyword, fused RRF k=60)"]:::fn
+  SEARCH --> G2{"G2 · relevance floor<br/>FUNCTION · best cosine >= 0.45?"}:::dec
+  G2 -->|"no"| AB["abstain — no real source"]:::term
+  G2 -->|"yes"| GEN["write the cited answer<br/>AGENT · Sonnet · generate() · answer.ts<br/>in: 8 chunks + question<br/>out: draft with [tags] (may call calculator tools)"]:::agent
+
+  GEN --> G4{"G4 · citation gate<br/>FUNCTION · verify-citations.ts<br/>every [tag] real? every claim tagged?"}:::dec
+  G4 -->|"fail"| REGEN["regenerate once (named errors)<br/>AGENT · Sonnet<br/>in: draft + errors · out: fixed draft"]:::agent
+  REGEN --> PRUNE["drop the bad sentence<br/>FUNCTION · pruneUngrounded()<br/>in: draft · out: draft minus untagged/fake-cited sentences"]:::fn
+  G4 -->|"pass"| G3
+  PRUNE --> G3{"G3 · recompute<br/>FUNCTION · g3-recompute.ts<br/>every number in a cited source/tool output?"}:::dec
+
+  G3 -->|"fail"| RETRY["retry once, else abstain"]:::term
+  G3 -->|"ok"| RS["warm rewrite<br/>AGENT · Haiku · reply synth · pipeline.ts<br/>in: approved draft<br/>out: friendly reply (keeps every tag + number)"]:::agent
+  RS --> G5{"G5 · claim-check<br/>AGENT · Haiku · reply adds NO new claim vs draft?"}:::dec
+  G5 -->|"pass"| OUTP(["out: cited answer"]):::term
+  G5 -->|"fail"| SHIP["ship the safe approved draft instead"]:::term
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+```
+
+---
+
+## 6 · The gates at a glance (safety spine)
+
+| Gate | File | Actor | Threshold / check | On fail |
+|---|---|---|---|---|
+| **G1** schema | `intake.ts` | LIBRARY · zod | intake JSON valid + enums | re-ask; malformed x2 → T3 |
+| **serviceError** | `intake.ts` | FUNCTION | transient (429/5xx/net) vs parse | honest "try again" |
+| **T3 tier** | `pipeline.ts` | FUNCTION | is it a dispute? | escalate to CA |
+| **G2** floor | `pipeline.ts` | FUNCTION | best cosine **≥ 0.45** | abstain |
+| **G4** citation | `verify-citations.ts` | FUNCTION | every claim cites a REAL retrieved source | regen → prune |
+| **prune** | `verify-citations.ts` | FUNCTION | drop bad sentence, keep cited rest | abstain if nothing left |
+| **G3** recompute | `g3-recompute.ts` | FUNCTION | every number in a cited source/tool | retry → abstain |
+| **G5** claim-check | `pipeline.ts` | AGENT · Haiku | reply adds no new claim | ship approved draft |
+
+**Models:** Haiku = intake · transform · fillSlots · rate-resolve · reply/G5. Sonnet = only the RAG generation. Embeddings = `bge-m3` (local, 1024-dim).
+
+## 7 · File index
+
+| Stage | File |
+|---|---|
+| API + memory + SSE | `app/api/ask/route.ts` |
+| Orchestrator (spine) | `lib/agents/pipeline.ts` |
+| Intake + G1 + serviceError | `lib/agents/intake.ts` |
+| Router + lane taxonomy | `lib/agents/lanes.ts` |
+| ASK move (clarify) | `lib/agents/clarify.ts` |
+| Tool schemas | `lib/tools/registry.ts` |
+| Lanes | `lib/agents/lanes/{calculation,rate,timeline}.ts` |
+| Rate data + lookup | `lib/rates/{table,lookup}.ts` |
+| Calculators | `lib/calculators/index.ts` |
+| RAG generation | `lib/agents/answer.ts` |
+| Retrieval (Hinglish rewrite) | `lib/retrieval/{transform,search,embed,config}.ts` |
+| Gates | `lib/gates/{verify-citations,g3-recompute}.ts` |
+| Observability | `lib/observability/langfuse.ts` |
+</content>
+
+</script>
+
+<script type="module">
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@12/lib/marked.esm.js";
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+const src = document.getElementById("src").textContent;
+// Route ```mermaid fences into <pre class="mermaid"> so Mermaid can render them.
+const renderer = new marked.Renderer();
+const origCode = renderer.code.bind(renderer);
+renderer.code = (code, lang) => {
+  const text = (typeof code === "object" && code) ? code.text : code;
+  const language = (typeof code === "object" && code) ? code.lang : lang;
+  if (language === "mermaid") {
+    const esc = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return `<pre class="mermaid">${esc}</pre>`;
+  }
+  return origCode(text, language);
+};
+document.getElementById("content").innerHTML = marked.parse(src, { renderer });
+mermaid.initialize({ startOnLoad:false, theme:"base", securityLevel:"loose",
+  themeVariables:{ fontFamily:"-apple-system, Segoe UI, Roboto, sans-serif", fontSize:"14px" } });
+await mermaid.run({ querySelector:"pre.mermaid" });
+</script>
+</body>
+</html>

@@ -1,207 +1,7 @@
 {
   "sut": "full-path-v2 (subsection-tolerant gate + completeness + allowed-tags-named)",
-  "cases": 60,
+  "cases": 30,
   "per_case": [
-    {
-      "id": "g001",
-      "question": "flipkart seller hoon, do states me godown hai, do registration chahiye",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g002",
-      "question": "footwear ka GST rate kya hai",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g003",
-      "question": "invoice hai par supplier ko 6 mahine se payment nahi kiya — ITC reverse hoga?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g004",
-      "question": "what is the time limit to issue a credit note for FY 2024-25?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g005",
-      "question": "Amazon pe bechta hu, TCS kitna katega?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g006",
-      "question": "GSTR-9C late file karne pe penalty?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g007",
-      "question": "Amazon pe goods sell kar raha hu, turnover 12 lakh hai, GST lena padega?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g008",
-      "question": "supplier ne GSTR-1 me invoice nahi dala, ITC claim kar sakta hu?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g009",
-      "question": "Meesho ne TCS kaat liya, section 52 me kitna aur kab pay hota hai?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g010",
-      "question": "restaurant Swiggy se order le raha hai, GST restaurant bhare ya Swiggy?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g011",
-      "question": "t-shirt 1800 MRP hai, apparel GST slab kaunsi?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g012",
-      "question": "LED TV bechta hu, GST rate kaunsa lagega?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g013",
-      "question": "skin cream aur lipstick cosmetics ka GST rate?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g014",
-      "question": "last year turnover 6 crore tha, e-invoice mandatory hai kya?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g015",
-      "question": "Monthly GSTR-3B ki normal due date kya hai?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g016",
-      "question": "GSTR-1 late ho gaya, late fee ka cap kahan se aata hai?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g017",
-      "question": "LUT pe export invoice banaya, unused ITC refund mil sakta hai?",
-      "tier": "T2",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g018",
-      "question": "courier se 60k ka parcel bhej raha hu, e-way bill chahiye?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g019",
-      "question": "composition me hu, interstate Amazon orders le sakta hu kya?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g020",
-      "question": "Delhi se Bengaluru customer ko goods ship kiye, place of supply kya hoga?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g021",
-      "question": "US client ko freelance design service de raha hu, place of supply kya hoga?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g022",
-      "question": "Amazon 194-O TDS GST cash ledger se adjust ho jayega kya?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g023",
-      "question": "Maharashtra SGST Act ka exact registration section batao",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g024",
-      "question": "China se imported mobile covers par customs duty kitni hai?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g025",
-      "question": "Karnataka professional tax freelancer ko pay karna hai kya?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
     {
       "id": "g026",
       "question": "DRC-01 notice aaya hai ITC mismatch ka, ab kya reply karu?",
@@ -283,14 +83,6 @@
       "first_rank": null
     },
     {
-      "id": "g036",
-      "question": "same state me two warehouses hain, separate GSTIN le sakta hu?",
-      "tier": "T1",
-      "unanswerable": false,
-      "hit": null,
-      "first_rank": null
-    },
-    {
       "id": "g037",
       "question": "composition seller Amazon pe goods bech sakta hai, interstate order allow hai kya?",
       "tier": "T1",
@@ -355,6 +147,38 @@
       "first_rank": null
     },
     {
+      "id": "g022",
+      "question": "Amazon 194-O TDS GST cash ledger se adjust ho jayega kya?",
+      "tier": "T1",
+      "unanswerable": true,
+      "hit": null,
+      "first_rank": null
+    },
+    {
+      "id": "g023",
+      "question": "Maharashtra SGST Act ka exact registration section batao",
+      "tier": "T1",
+      "unanswerable": true,
+      "hit": null,
+      "first_rank": null
+    },
+    {
+      "id": "g024",
+      "question": "China se imported mobile covers par customs duty kitni hai?",
+      "tier": "T1",
+      "unanswerable": true,
+      "hit": null,
+      "first_rank": null
+    },
+    {
+      "id": "g025",
+      "question": "Karnataka professional tax freelancer ko pay karna hai kya?",
+      "tier": "T1",
+      "unanswerable": true,
+      "hit": null,
+      "first_rank": null
+    },
+    {
       "id": "g045",
       "question": "Amazon 194-O TDS ka rate FY 2026-27 me kya hai?",
       "tier": "T1",
@@ -413,70 +237,6 @@
     {
       "id": "g052",
       "question": "Maharashtra PTRC registration employees ke liye kab compulsory hota hai?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g053",
-      "question": "home bakery ke liye FSSAI license basic chahiye ya state?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g054",
-      "question": "Amazon export start karna hai, IEC code apply kaise karu?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g055",
-      "question": "foreign client ka payment late aaya, FEMA realisation extension ka rule kya hai?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g056",
-      "question": "10 employees ho gaye, PF ESI registration threshold kya hai?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g057",
-      "question": "shop and establishment license online store ke liye mandatory hai kya?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g058",
-      "question": "brand name register karna hai, trademark class cosmetics ke liye kaunsi?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g059",
-      "question": "private limited company ka ROC annual filing due date kya hai?",
-      "tier": "T1",
-      "unanswerable": true,
-      "hit": null,
-      "first_rank": null
-    },
-    {
-      "id": "g060",
-      "question": "advance ruling Karnataka me mere product pe hua tha kya, case law dikhao",
       "tier": "T1",
       "unanswerable": true,
       "hit": null,

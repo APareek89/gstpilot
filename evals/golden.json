@@ -1,5 +1,6 @@
 {
-  "_readme": "GSTPilot golden set v2 — schema in evals/golden-schema.ts, labeling rules in docs/LABELING_GUIDE.md. Only status:verified cases gate CI. Target: 60 cases (40 answerable / 20 unanswerable).",
+  "_readme": "GSTPilot golden set v2 — schema in evals/golden-schema.ts, labeling rules in docs/LABELING_GUIDE.md. Only status:verified cases gate CI. Target: 60 cases (40 answerable / 20 unanswerable). version bumps once per appended production case (see lib/golden/append.ts).",
+  "version": "2.0.0",
   "cases": [
     {
       "id": "g001",

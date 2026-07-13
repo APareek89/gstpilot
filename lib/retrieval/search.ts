@@ -7,6 +7,7 @@ import { getEmbedder } from "./embed";
 import { EMBEDDING } from "./config";
 import { transformQuery, type Transformation } from "./transform";
 import { getServiceClient, TABLE_PREFIX } from "../supabase";
+import type { LfParent } from "../observability/langfuse";
 
 // The retrieval constants, in one visible place (they're also written into every trace).
 export const RETRIEVAL_CONFIG = {
@@ -30,19 +31,26 @@ export type SearchResult = {
   traceId: string | null;
 };
 
-export async function hybridSearch(query: string, source: string): Promise<SearchResult> {
+export async function hybridSearch(query: string, source: string, parent?: LfParent, userHint?: string): Promise<SearchResult> {
   const supabase = getServiceClient();
 
   // Step 0: transform — deterministic id references + vocabulary rewrite. Both search
   // channels run on the REWRITTEN text; the original is preserved in the trace.
+  // `userHint` (memory) only helps the rewrite resolve vague references — never the search itself.
   const tT = Date.now();
-  const transformation = await transformQuery(query);
+  const transformation = await transformQuery(query, parent, userHint);
   const tTransform = Date.now() - tT;
 
   // Dense channel embeds the hypothetical ANSWER when available (corpus text looks like
   // answers, not questions); keyword channel gets the rewrite + verbatim identifiers.
   const denseInput = transformation.hyde ?? transformation.rewritten;
   const keywordInput = [transformation.rewritten, ...transformation.exact_tokens].join(" ");
+
+  // Doc-type prior: for statute-anchored questions, lift Act+Rules above the notification/circular
+  // stream so a broad "how do I …" doesn't bury the anchor section (e.g. s54 for refunds). Rate/
+  // exemption/late-fee questions keep 1.0 — there the notification IS the authority. Applied inside
+  // the fusion SQL, BEFORE the top-8 cut, so a crowded-out section can actually climb into the set.
+  const statuteBoost = transformation.doc_type_hint === "statute" ? 1.5 : 1.0;
 
   const t0 = Date.now();
   const [queryVector] = await getEmbedder().embed([denseInput]);
@@ -58,7 +66,7 @@ export async function hybridSearch(query: string, source: string): Promise<Searc
       [d, k, f] = await Promise.all([
         supabase.rpc(`${TABLE_PREFIX}dense_search`, { query_embedding: embedding, match_count: RETRIEVAL_CONFIG.channel_top_n }),
         supabase.rpc(`${TABLE_PREFIX}keyword_search`, { query_text: keywordInput, match_count: RETRIEVAL_CONFIG.channel_top_n }),
-        supabase.rpc(`${TABLE_PREFIX}hybrid_search`, { query_embedding: embedding, query_text: keywordInput, match_count: RETRIEVAL_CONFIG.final_top_n }),
+        supabase.rpc(`${TABLE_PREFIX}hybrid_search`, { query_embedding: embedding, query_text: keywordInput, match_count: RETRIEVAL_CONFIG.final_top_n, statute_boost: statuteBoost }),
       ]);
       const firstError = d.error ?? k.error ?? f.error;
       if (firstError) throw new Error(firstError.message);
@@ -109,7 +117,7 @@ export async function hybridSearch(query: string, source: string): Promise<Searc
       .insert({
         source,
         query,
-        config: { ...RETRIEVAL_CONFIG, transformation },
+        config: { ...RETRIEVAL_CONFIG, statute_boost: statuteBoost, transformation },
         timings_ms: result.timings_ms,
         dense: result.dense,
         keyword: result.keyword,

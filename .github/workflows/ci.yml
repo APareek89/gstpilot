@@ -1,0 +1,84 @@
+# Phase 8 flywheel — CI gates. The golden set only protects the product if a regression it would
+# catch actually BLOCKS the change. Two tiers:
+#   • pull_request → the 25-case SMOKE (absolute gates: T3 recall, false-answer, citation validity).
+#     Fast + cheap enough to gate every PR. A failure is a hard block — you cannot merge a change
+#     that answers a dispute as routine, invents a citation, or bluffs on law we don't have.
+#   • nightly (cron) → the FULL suite + a Langfuse experiment vs the last baseline, so slower-moving
+#     metrics (fact_match) are tracked as a trend line without gating every PR on a flaky number.
+#
+# The jobs run vitest directly (not `pnpm eval:*`) so the local corp-proxy CA path baked into those
+# scripts isn't inherited on GitHub's clean runners.
+#
+# ⚠️ Anand: this needs a GitHub remote + these repo secrets set (Settings → Secrets → Actions):
+#   SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY · ANTHROPIC_API_KEY · LANGFUSE_PUBLIC_KEY · LANGFUSE_SECRET_KEY
+# Decide whether the per-PR smoke's ~$1 / ~8 min is acceptable, or move it to `workflow_dispatch`.
+
+name: eval-gates
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC nightly — full suite
+
+concurrency:
+  group: eval-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: smoke — absolute gates (hard block)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # cache the bge-m3 weights Transformers.js downloads on first retrieval (~600MB)
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-bge-m3
+      - name: smoke gates
+        run: pnpm exec vitest run evals/smoke.eval.test.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+
+  nightly:
+    name: nightly — full suite + Langfuse experiment
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-bge-m3
+      - name: full answer suite (60 cases)
+        run: pnpm exec vitest run evals/answer.eval.test.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      - name: sync run to Langfuse (experiment vs baseline)
+        run: pnpm exec tsx scripts/langfuse-sync.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}

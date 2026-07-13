@@ -1,0 +1,17 @@
+%% GSTPilot — TIMELINE lane
+%% Open in: mermaid.live | VS Code Mermaid Preview | admin/architecture
+flowchart TD
+  IN(["from router:<br/>'footwear rate change in 6 months?'"]):::term --> WIN
+
+  WIN["read the time window<br/>FUNCTION · parseWindowMonths() (regex)<br/>in: question<br/>out: N months (default 24)"]:::fn --> SEARCH["find dated documents<br/>FUNCTION + LIBRARY(Supabase)<br/>in: question<br/>out: notifications/circulars with a release date"]:::fn
+  SEARCH --> SEED["add the rate-table anchor<br/>FUNCTION<br/>in: item<br/>out: + its governing notification (dated)"]:::fn
+  SEED --> COUNT{"how many DATED docs in the window?<br/>FUNCTION"}:::dec
+
+  COUNT -->|">= 2"| TL["out: TIMELINE — dates + citations, old to new<br/>(the ONLY case it may claim a 'change')"]:::term
+  COUNT -->|"exactly 1"| ONE["out: 'just this one doc'"]:::term
+  COUNT -->|"0, but topic held"| NC["out: 'no change in that window' + latest doc"]:::term
+  COUNT -->|"none"| INS["out: abstain — won't fabricate a timeline"]:::term
+
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;

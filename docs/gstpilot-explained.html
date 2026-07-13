@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GSTPilot — the whole system, explained</title>
+<style>
+  :root{
+    --paper:#f5f3ee; --surface:#fff; --line:#e6e1d6; --ink:#211f1a; --muted:#7a746a;
+    --brand:#0e5f52; --brand-ink:#0a4b40; --brand-soft:#e4f0ec;
+    --amber:#8f5e12; --amber-soft:#f6ecd6; --rust:#9c3a2c; --rust-soft:#f4e5e1;
+    --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+    --mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
+  .shell{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:250px 1fr;gap:36px;padding:0 24px 100px}
+  /* header */
+  header{grid-column:1/-1;padding:40px 0 8px;border-bottom:1px solid var(--line);margin-bottom:24px}
+  header .kicker{font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);font-weight:600}
+  h1{font-family:var(--serif);font-size:2.4rem;margin:.1em 0 .1em;font-weight:600;letter-spacing:-.01em}
+  header p.lede{color:var(--muted);font-size:1.05rem;max-width:70ch;margin:.2em 0 18px}
+  .metrics{display:flex;flex-wrap:wrap;gap:8px}
+  .m{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 14px;text-align:center;min-width:82px}
+  .m b{display:block;font-family:var(--serif);font-size:1.35rem;color:var(--brand-ink);line-height:1.1}
+  .m span{font-size:.72rem;color:var(--muted)}
+  .m.good b{color:var(--brand)} .m.warn b{color:var(--amber)} .m.bad b{color:var(--rust)}
+  /* toc */
+  nav.toc{position:sticky;top:0;align-self:start;padding-top:24px;font-size:.86rem;max-height:100vh;overflow:auto}
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:s}
+  nav.toc a{display:block;color:var(--muted);padding:4px 0 4px 22px;position:relative;border-left:2px solid transparent}
+  nav.toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--brand-soft)}
+  nav.toc a::before{counter-increment:s;content:counter(s);position:absolute;left:0;font-family:var(--mono);font-size:.72rem;color:var(--brand);opacity:.7}
+  /* content */
+  main{min-width:0}
+  section{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 26px;margin-bottom:18px;scroll-margin-top:16px}
+  section>h2{font-family:var(--serif);font-size:1.5rem;font-weight:600;margin:.1em 0 .5em;letter-spacing:-.01em}
+  section h3{font-size:1rem;margin:1.4em 0 .3em;color:var(--brand-ink)}
+  p{margin:.6em 0}
+  .lead{font-size:1.02rem}
+  strong{font-weight:650}
+  em{color:var(--brand-ink)}
+  ul,ol.steps{margin:.5em 0;padding-left:1.2em} li{margin:.3em 0}
+  code{font-family:var(--mono);font-size:.85em;background:var(--brand-soft);color:var(--brand-ink);padding:.1em .4em;border-radius:5px}
+  pre{background:#1c2b27;color:#e7efec;padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5}
+  pre code{background:none;color:#dfeae6;padding:0}
+  .file{font-family:var(--mono);font-size:.82em;background:var(--paper);border:1px solid var(--line);color:var(--brand);border-radius:6px;padding:.12em .5em;white-space:nowrap;display:inline-block}
+  .file::before{content:"‹›";color:var(--muted);margin-right:.4em;font-size:.9em}
+  .file:hover{border-color:var(--brand);text-decoration:none;background:var(--brand-soft)}
+  .files{margin:12px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .files .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-right:2px}
+  table{border-collapse:collapse;width:100%;font-size:.87rem;margin:12px 0}
+  th,td{border-bottom:1px solid var(--line);text-align:left;padding:8px 10px;vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+  .pill{display:inline-block;border-radius:99px;padding:1px 9px;font-size:.72rem;font-weight:600}
+  .pill.t{background:var(--brand-soft);color:var(--brand-ink)} .pill.a{background:var(--amber-soft);color:var(--amber)} .pill.r{background:var(--rust-soft);color:var(--rust)}
+  .good{color:var(--brand);font-weight:650} .bad{color:var(--rust);font-weight:650} .warnc{color:var(--amber);font-weight:650}
+  .flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0}
+  .node{background:var(--paper);border:1.5px solid var(--brand);border-radius:10px;padding:7px 11px;font-size:.78rem;font-weight:600}
+  .node small,.gate small{font-weight:400;color:var(--muted);display:block;font-size:.9em}
+  .gate{background:var(--amber-soft);border:1.5px dashed var(--amber);border-radius:10px;padding:6px 9px;font-size:.72rem;color:var(--amber)}
+  .arr{color:var(--muted);font-weight:700}
+  .note{border-left:4px solid var(--amber);background:var(--amber-soft);padding:10px 14px;border-radius:0 10px 10px 0;font-size:.9rem;margin:14px 0}
+  .note.brand{border-color:var(--brand);background:var(--brand-soft)}
+  .note b{color:var(--brand-ink)}
+  .try{background:var(--brand-soft);border-radius:10px;padding:14px;margin:12px 0;font-size:.9rem}
+  input[type=number]{width:64px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;font-family:var(--mono)}
+  button{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:.82rem;font-weight:600;cursor:pointer}
+  button:hover{background:var(--brand-ink)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px} @media(max-width:640px){.two{grid-template-columns:1fr}}
+  .k{font-family:var(--serif);font-style:italic;color:var(--brand-ink)}
+  footer{grid-column:1/-1;color:var(--muted);font-size:.82rem;text-align:center;padding-top:20px;border-top:1px solid var(--line)}
+  @media(max-width:860px){.shell{grid-template-columns:1fr} nav.toc{position:static;max-height:none;order:-1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:8px}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header>
+  <div class="kicker">Reference · read top-to-bottom to catch up</div>
+  <h1>GSTPilot, explained end-to-end</h1>
+  <p class="lede">A citation-grounded AI that answers GST questions for Indian e-commerce sellers — from the live body of law, with every claim tied to an exact section. This page walks the whole system in plain language, and links straight into the code so you can go as deep as you want. Every <span class="file">file/path.ts</span> is clickable.</p>
+  <div class="metrics">
+    <span class="m"><b>1,064</b><span>law chunks</span></span>
+    <span class="m good"><b>0.775</b><span>recall@10</span></span>
+    <span class="m good"><b>1.0</b><span>T3 recall</span></span>
+    <span class="m good"><b>0</b><span>false answers</span></span>
+    <span class="m warn"><b>~0.15</b><span>fact-match*</span></span>
+    <span class="m"><b>60</b><span>golden cases</span></span>
+    <span class="m"><b>5</b><span>gates</span></span>
+  </div>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#what">What it is &amp; the rules</a></li>
+    <li><a href="#twopaths">The one big idea</a></li>
+    <li><a href="#offline">Offline: law → database</a></li>
+    <li><a href="#store">The knowledge store</a></li>
+    <li><a href="#pipeline">Online: the agent team</a></li>
+    <li><a href="#retrieval">Retrieval &amp; the recent fix</a></li>
+    <li><a href="#gates">The 5 gates</a></li>
+    <li><a href="#calc">Model proposes, code disposes</a></li>
+    <li><a href="#abstain">Permission to not know</a></li>
+    <li><a href="#evals">Evals &amp; why they wobble</a></li>
+    <li><a href="#flywheel">The self-improvement flywheel</a></li>
+    <li><a href="#ui">The chat you see</a></li>
+    <li><a href="#watch">Watching it think</a></li>
+    <li><a href="#state">Where it stands &amp; next</a></li>
+    <li><a href="#map">Map of the code</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="what">
+  <h2>1 · What it is, and the rules it can't break</h2>
+  <p class="lead">GSTPilot answers questions like <em>“footwear ka GST rate kya hai?”</em> or <em>“Amazon pe bechta hu, TCS kitna katega?”</em> — in the seller's own Hinglish — and backs every legal claim with the exact section or notification it came from. When the law it holds doesn't cover a question, it <strong>says so</strong> instead of guessing. When a question smells like a live dispute (a notice, a penalty, a seizure), it stops and points to a Chartered Accountant.</p>
+  <p>Six promises are <strong>non-negotiable</strong> — they're the product's constitution, enforced in code, not vibes:</p>
+  <table>
+    <tr><th>Promise</th><th>Why it matters</th></tr>
+    <tr><td>Every legal claim cites a retrieved chunk</td><td>A tax answer you can't verify is worse than no answer. A <em>deterministic</em> gate checks this — you can't sweet-talk it.</td></tr>
+    <tr><td>False-answer ≈ 0 on “unanswerable” questions</td><td>Confidently answering law we don't have is the catastrophic failure. Better to abstain.</td></tr>
+    <tr><td>Disputes always escalate (T3 recall = 1.0)</td><td>A live proceeding needs a professional, not a chatbot.</td></tr>
+    <tr><td>Rates / dates / thresholds come from documents or code — never model memory</td><td>Models misremember numbers just often enough to be dangerous.</td></tr>
+    <tr><td>Law text is never hand-edited</td><td>The corpus is an audit trail; every doc has a source + as-on date + checksum.</td></tr>
+    <tr><td>Identity fields are never filled by a model</td><td>A chunk's id, a case's labels — anything that gates correctness — is human/deterministic only.</td></tr>
+  </table>
+  <div class="files"><span class="lbl">read</span>
+    <a class="file" href="../docs/PRODUCT_BRIEF.md">docs/PRODUCT_BRIEF.md</a>
+    <a class="file" href="../CLAUDE.md">CLAUDE.md</a>
+    <a class="file" href="../HANDOFF.md">HANDOFF.md</a>
+  </div>
+</section>
+
+<section id="twopaths">
+  <h2>2 · The one big idea: two separate paths</h2>
+  <p class="lead">The whole architecture fits in a sentence: <strong>a user's question never touches a PDF.</strong></p>
+  <div class="two">
+    <div>
+      <h3>Offline (runs when the law changes)</h3>
+      <p>Government PDFs → cleaned text → cut into “chunks” of law → turned into numbers (embeddings) → stored in the database. Slow, careful, run rarely.</p>
+    </div>
+    <div>
+      <h3>Online (runs on every question)</h3>
+      <p>Question → search the database → write a cited answer → check it → reply. Fast, and <em>auditable</em>, because it only ever reads what's already been vetted.</p>
+    </div>
+  </div>
+  <div class="flow">
+    <span class="node">410 gov PDFs</span><span class="arr">→</span>
+    <span class="node">extract (Python)<small>pdfplumber</small></span><span class="arr">→</span>
+    <span class="node">chunkers (TS)<small>split at legal lines</small></span><span class="arr">→</span>
+    <span class="node">embeddings<small>bge-m3, local</small></span><span class="arr">→</span>
+    <span class="node">Supabase<small>1,064 chunks: text + search + vector</small></span>
+  </div>
+  <p>This split is what makes answers fast <em>and</em> trustworthy: the expensive, error-prone work (reading 200-page PDFs) happens once, offline; the live path only queries clean, checksummed data.</p>
+</section>
+
+<section id="offline">
+  <h2>3 · Offline: turning the law into a database</h2>
+
+  <h3>Getting the law onto disk</h3>
+  <p>The corpus is two layers: <strong>base</strong> (the consolidated CGST Act, IGST Act, CGST Rules — 3 big PDFs) and <strong>stream</strong> (407 notifications &amp; circulars pulled from the government's JSON API). Every file is recorded with its source, an “as-on” date, and a SHA-256 checksum — because “the law” is really “a specific version of a document,” and government pages rot.</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../scripts/download-stream.ts">scripts/download-stream.ts</a>
+    <a class="file" href="../corpus/manifest.json">corpus/manifest.json</a>
+  </div>
+
+  <h3>Reading the PDFs (no OCR)</h3>
+  <p>A small Python script opens each PDF with <strong>pdfplumber</strong>, which reads the text layer the PDF already contains (these are digital documents, not scans — so no OCR is used). It de-noises: strips invisible characters, fixes hyphenated line breaks, drops repeating page headers/footers.</p>
+  <div class="files"><span class="lbl">code</span><a class="file" href="../scripts/extract/extract.py">scripts/extract/extract.py</a></div>
+
+  <h3>Cutting it into chunks — at <em>legal</em> boundaries, not word counts</h3>
+  <p>A chunk is <strong>one complete legal thought</strong>: a whole section or rule, with its provisos (“Provided that…”), explanations and exceptions <strong>glued on</strong>. Split a rule from its exception and retrieval will happily serve confident, cited, <em>incomplete</em> law — the worst kind. The boundary detectors are deliberately paranoid because legal text is full of lines that start with “N.” but aren't sections (footnotes, numbered Explanations).</p>
+  <pre><code>// a real rule heading always carries ".-" shortly after its number; a footnote doesn't
+sectionRe: /^(?:\d{0,2}\s*\[\s*)?(\d{1,3}[A-Z]{0,2})\.?\s*\[?\s*(?=[A-Z]).{0,260}?[.:]\s*-/</code></pre>
+  <p>Each chunk gets a <strong>deterministic id</strong> like <code>CGST-ACT/s16</code> or <code>CGST-RULES/r89</code> — identical on every run, so amendments can address it and tests can assert on it. Old/replaced provisions are kept but marked <code>superseded</code> (filtered out of search, preserved for the audit trail).</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../lib/ingestion/chunk-acts.ts">lib/ingestion/chunk-acts.ts</a>
+    <a class="file" href="../lib/ingestion/chunk-notifications.ts">lib/ingestion/chunk-notifications.ts</a>
+    <a class="file" href="../lib/ingestion/enrich.ts">lib/ingestion/enrich.ts</a>
+  </div>
+  <div class="note"><b>The three-tier metadata rule.</b> A chunk's facts come from three sources of different trust: <em>config</em> (things we know — which act), <em>regex</em> (structure the drafters wrote — section numbers), and <em>model</em> (judgment labels only, from a closed list). The model <em>never</em> fills an identity field, because deterministic sources fail loudly while models fail plausibly.</div>
+
+  <h3>Turning text into numbers (embeddings)</h3>
+  <p>An <strong>embedding</strong> is a list of 1,024 numbers that captures a text's <em>meaning</em>, so texts about the same idea land near each other even in different words. GSTPilot runs the open <strong>bge-m3</strong> model locally (no API, no per-token cost) — it handles Hinglish queries against English law. The model is <strong>pinned</strong>: an embedding is only comparable to embeddings from the exact same model weights.</p>
+  <div class="note brand"><b>A fix from this week.</b> Big chunks were being embedded on only their first 6,000 characters (an old memory-saving cap) — so Rule 89's refund formula, buried deeper in a 16k-char chunk, was invisible to search. We removed the cap and now embed giants whole (bge-m3 handles up to ~8,192 tokens), with a tripwire that flags any chunk too big even for that. See <a href="#retrieval">§6</a>.</div>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../scripts/embed-chunks.ts">scripts/embed-chunks.ts</a>
+    <a class="file" href="../lib/retrieval/embed.ts">lib/retrieval/embed.ts</a>
+    <a class="file" href="../lib/retrieval/config.ts">lib/retrieval/config.ts</a>
+  </div>
+</section>
+
+<section id="store">
+  <h2>4 · The knowledge store</h2>
+  <p>Everything lands in one Postgres table (via Supabase) — each chunk row holds its text, a full-text-search column, and a <code>vector(1024)</code> for meaning-search, side by side. One ordinary database does both jobs; no separate “vector database” needed (that's what the <strong>pgvector</strong> extension buys us).</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../supabase/migrations/0002_legal_chunks.sql">migrations/0002_legal_chunks.sql</a>
+    <a class="file" href="../lib/supabase.ts">lib/supabase.ts</a>
+    <a class="file" href="../app/admin/chunks/">app/admin/chunks/ (inspector)</a>
+  </div>
+</section>
+
+<section id="pipeline">
+  <h2>5 · Online: the supervised agent team</h2>
+  <p class="lead">A question passes down a line of small workers, each watched by a <strong>gate</strong> that can stop the line. Every step is logged so the whole trajectory is auditable.</p>
+  <div class="flow">
+    <span class="node">INTAKE<small>haiku: intent + risk tier</small></span>
+    <span class="gate">G1 · schema<small>bad JSON → default to T3</small></span><span class="arr">→</span>
+    <span class="node" style="border-color:var(--rust)">T3? → CA handoff<small>never reaches a model answer</small></span>
+  </div>
+  <div class="flow">
+    <span class="arr">T1/T2 →</span>
+    <span class="node">RETRIEVAL<small>hybrid search</small></span>
+    <span class="gate">G2 · relevance floor</span><span class="arr">→</span>
+    <span class="node">RESOLUTION<small>sonnet + calculators</small></span>
+    <span class="gate">G4 · citations ⊆ sources</span>
+    <span class="gate">G3 · recompute numbers</span><span class="arr">→</span>
+    <span class="node">REPLY<small>haiku tone</small></span>
+    <span class="gate">G5 · claim check</span><span class="arr">→</span>
+    <span class="node">you</span>
+  </div>
+  <p>The three <span class="pill t">tiers</span> decide the path: <span class="pill t">T1</span> = how the law works in general · <span class="pill a">T2</span> = computes <em>your</em> money or a deadline · <span class="pill r">T3</span> = a notice / penalty / dispute → escalate. When intake is unsure, it fails <em>up</em> the ladder (worst case: a routine question meets a CA), never down.</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../lib/agents/pipeline.ts">lib/agents/pipeline.ts</a>
+    <a class="file" href="../lib/agents/intake.ts">lib/agents/intake.ts</a>
+    <a class="file" href="../lib/agents/answer.ts">lib/agents/answer.ts</a>
+    <a class="file" href="../app/api/ask/route.ts">app/api/ask/route.ts</a>
+  </div>
+</section>
+
+<section id="lanes">
+  <h2>5b · The third move (ASK) and the router <span class="pill t">Phase 8b</span></h2>
+  <p class="lead">The line above had only two exits: a cited answer, or an abstention. A question that was answerable <em>in principle</em> but missing an input — a late fee with no dates — had nowhere to go but "the sources don't cover this". Phase 8b adds a <strong>third move: ASK</strong>, and splits the front of the line into a <strong>router</strong> that sends each question down the lane that fits it.</p>
+  <div class="flow">
+    <span class="node">INTAKE<small>now also picks a LANE</small></span><span class="arr">→</span>
+    <span class="node">ROUTER<small>reconcileLane</small></span><span class="arr">→</span>
+    <span class="node">rate-lookup</span>
+    <span class="node">calculation</span>
+    <span class="node">procedure (RAG)</span>
+    <span class="node">change-over-time</span>
+    <span class="node" style="border-color:var(--rust)">escalate</span>
+  </div>
+  <p>Before a lane answers, it checks whether it has the inputs its tool needs — read straight from the tool's <strong>required-input schema</strong>. A missing input becomes <strong>one bundled friendly question</strong> ("which return — GSTR-3B, GSTR-1 or GSTR-9? the due date? nil return? turnover?"), carried across turns by the thread. Every tool you add teaches the ASK move for free, because the question is <em>derived from the schema</em>, never hand-written. The understanding step now also has a clock, so "5 days back", "aaj", "10 crore" resolve to real dates and numbers.</p>
+  <p><strong>Rates as facts, not passages.</strong> A rate lives inside a giant schedule chunk where the item and its % often get split apart, so retrieval finds the item but not the number. Rates now come from a structured <strong>rate table</strong> and a <code>lookup_rate</code> step that returns the % <em>pre-cited</em>, exactly like the calculators. One move fixes three bugs at once: the buried-rate dilution, the citation-gate over-abstention (a pre-cited fact can't trip the gate), and the English-works / Hinglish-abstains inconsistency (lookup is language-agnostic — "chappal" resolves to footwear). Conditional items ask the price threshold ("₹2,500 se kam ya zyada?"). <em>The table is model-compiled and still needs a human to verify it against the source PDFs.</em></p>
+  <p><strong>The gate got gentler.</strong> It used to discard a whole answer over one untagged sentence — the reason nearly every RAG answer abstained. Now it drops just the offending sentence and keeps the cited remainder, abstaining fully only if nothing grounded survives. The hard bar stays: an <em>invented</em> citation is still never shown.</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../lib/agents/lanes.ts">lib/agents/lanes.ts</a>
+    <a class="file" href="../lib/agents/clarify.ts">lib/agents/clarify.ts</a>
+    <a class="file" href="../lib/agents/lanes/calculation.ts">lanes/calculation.ts</a>
+    <a class="file" href="../lib/agents/lanes/rate.ts">lanes/rate.ts</a>
+    <a class="file" href="../lib/agents/lanes/timeline.ts">lanes/timeline.ts</a>
+    <a class="file" href="../lib/rates/table.ts">lib/rates/table.ts</a>
+    <a class="file" href="../lib/tools/registry.ts">lib/tools/registry.ts</a>
+  </div>
+</section>
+
+<section id="retrieval">
+  <h2>6 · Retrieval — and the fix from this week</h2>
+
+  <h3>First, transform the question</h3>
+  <p>Before searching, one Haiku call rewrites the seller's words into the statute's vocabulary — <em>“TCS kitna katega”</em> → <em>“electronic commerce operator collect tax at source”</em> (the law never says “TCS”!). References like <em>“section 52”</em> skip search entirely and resolve straight to a chunk id, because <span class="k">similarity is the wrong tool for identity</span>. And the meaning-channel embeds a short <strong>fake hypothetical answer</strong>, not the question — the corpus is full of answers, so an answer-shaped probe lands nearer the truth.</p>
+  <div class="files"><span class="lbl">code</span><a class="file" href="../lib/retrieval/transform.ts">lib/retrieval/transform.ts</a></div>
+
+  <h3>Two channels, fused by rank</h3>
+  <p>Search runs two ways with <strong>complementary blind spots</strong>: <strong>dense</strong> (meaning) finds <em>“invoice mila par payment nahi kiya”</em> ≈ Section 16 even with no shared words; <strong>keyword</strong> (exact tokens, with hand-built rarity weighting so “footwear” outweighs “rate”) finds codes like “GSTR-9C” that embeddings blur. They're fused by <strong>rank</strong>, never raw score (a cosine of 0.83 and a keyword score of 14.2 are apples and oranges).</p>
+  <div class="try">
+    <b>Try the fusion math (RRF)</b> — a chunk's rank in each channel (blank = not found):<br>
+    dense rank <input type="number" id="dr" value="2" min="1"> &nbsp; keyword rank <input type="number" id="kr" value="1" min="1">
+    <button onclick="rrf()">compute</button> &nbsp; <span id="rrfout" style="font-weight:700;font-family:var(--mono)"></span>
+    <div style="font-size:.82rem;color:var(--muted);margin-top:6px">score = 1/(60+dense) + 1/(60+keyword) · being solid in <em>both</em> beats spiking in one</div>
+  </div>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../lib/retrieval/search.ts">lib/retrieval/search.ts</a>
+    <a class="file" href="../supabase/migrations/0006_idf_keyword_search.sql">migrations/0006_idf_keyword_search.sql</a>
+    <a class="file" href="../supabase/migrations/0003_hybrid_search.sql">migrations/0003_hybrid_search.sql</a>
+  </div>
+
+  <h3>This week's two fixes (the “refund” bug)</h3>
+  <p>A live question — <em>“how do i get gst refund”</em> — was wrongly abstaining. Digging in found two structural causes, both now fixed:</p>
+  <ol class="steps">
+    <li><strong>Giant chunks, embedded half-blind.</strong> The refund section (s54, 11.9k chars) and Rule 89 (16.3k chars) were embedded on only their first 6,000 chars. <span class="good">Fix:</span> stop truncating — embed giants whole, one at a time to stay within memory, with a tripwire for anything over the model's real limit. Result: s54 jumped from search rank #15 to #2. <a class="file" href="../scripts/embed-chunks.ts">scripts/embed-chunks.ts</a></li>
+    <li><strong>The statute lost to the notification “stream.”</strong> Broad “how do I…” questions pulled plain-language circulars above the actual Act. <span class="good">Fix:</span> an <em>intent-aware</em> boost — for procedural questions, lift Act &amp; Rules above notifications; for <em>rate</em> questions (where a notification genuinely <em>is</em> the law) leave it untouched. <a class="file" href="../supabase/migrations/0009_doc_type_boost.sql">migrations/0009_doc_type_boost.sql</a></li>
+  </ol>
+  <div class="note"><b>The honest twist.</b> Retrieval got measurably better, but the answer still abstained — because the real bottleneck turned out to be the <em>citation gate</em> over-abstaining (see <a href="#state">§14</a>), not retrieval. Good example of “fix the thing the evidence points at, not the thing you assumed.”</div>
+</section>
+
+<section id="gates">
+  <h2>7 · The five gates — the ladder rule</h2>
+  <p class="lead">Catch each kind of failure on the <strong>cheapest rung that can see it.</strong></p>
+  <table>
+    <tr><th>Gate</th><th>Checks</th><th>How (and why it can't be gamed)</th></tr>
+    <tr><td><b>G1</b> schema</td><td>intake JSON is well-formed</td><td>a zod parse — free; a double failure defaults to T3 (fail up)</td></tr>
+    <tr><td><b>G2</b> relevance floor</td><td>the best chunk isn't hopelessly unrelated</td><td>a similarity threshold — if even the top chunk is weak, generation ran on sand</td></tr>
+    <tr><td><b>G4</b> citations</td><td>every <code>[tag]</code> is a chunk we actually retrieved</td><td><code>Set.has()</code> — arithmetic, not a reader; an invented citation simply isn't in the set</td></tr>
+    <tr><td><b>G3</b> recompute</td><td>every number matches its cited source / calculator</td><td>plain code re-derives the figure — the model can't fudge a date-diff</td></tr>
+    <tr><td><b>G5</b> claim check</td><td>the friendly rewrite didn't quietly add or strengthen a claim</td><td>the <em>only</em> gate that spends a model call — because “this rephrase over-promises” needs a reader</td></tr>
+  </table>
+  <p><span class="k">Verification is easier than generation</span> — that's why a model may check what a model wrote (G5), but only after the free arithmetic gates (G1–G4) have done their work. Every failure path ends the same safe way: <strong>one regeneration with the errors named</strong> (a targeted edit beats a blind retry), then abstention — never a silent bad answer.</p>
+  <pre><code>// G4 — you cannot argue with set membership
+const invalid = citedTags.filter(id =&gt; !providedSources.has(id));
+// fail → regenerate with errors NAMED → still failing → abstain</code></pre>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../lib/gates/verify-citations.ts">lib/gates/verify-citations.ts</a>
+    <a class="file" href="../lib/gates/g3-recompute.ts">lib/gates/g3-recompute.ts</a>
+    <a class="file" href="../docs/GATES.md">docs/GATES.md</a>
+  </div>
+</section>
+
+<section id="calc">
+  <h2>8 · “Model proposes, code disposes”</h2>
+  <p>Money math never happens in prose. The model extracts the parameters and <em>calls a pure function</em>; the figure comes back with its own legal citations attached.</p>
+  <pre><code>gstrLateFee({ due_date:"2026-02-20", filing_date:"2026-03-01",
+              nil_return:false, annual_turnover_inr:20_000_000 })
+// → { days_late: 9, fee_per_day: 50, computed_fee: 450, payable: 450,
+//     citation_ids: ["CGST-ACT/s47","NOTIF-CT/nt-2021-019", ...] }</code></pre>
+  <p>Why: “due 20-Feb, filed 1-Mar — 9 or 10 days late?” A model guessing likely-looking digits gets such off-by-ones wrong just often enough to hurt; a date-diff in code is exact and testable. Interest under s50 (18% p.a.) works the same way.</p>
+  <div class="files"><span class="lbl">code</span><a class="file" href="../lib/calculators/">lib/calculators/</a></div>
+</section>
+
+<section id="abstain">
+  <h2>9 · Permission to not know</h2>
+  <p>Models hallucinate because training rewarded answering. GSTPilot makes abstention a <strong>first-class, instructed output</strong> — an exact phrase, framed as a <em>success</em>: <em>“the available sources don't cover this point.”</em> The gates complete the economics — a made-up claim costs a regeneration, while abstaining sails straight through. <span class="k">Honesty is made cheaper than bluffing.</span> On the 20 deliberately-unanswerable test questions, it refuses all 20.</p>
+</section>
+
+<section id="evals">
+  <h2>10 · Evals — the ruler, and why it wobbles</h2>
+  <p class="lead">The measuring stick was built <strong>before</strong> the agent. 60 “golden” cases (40 answerable / 20 unanswerable, 7 T3), each with expected chunks, exact required facts, forbidden strings, intent and tier.</p>
+  <p><strong>Per-metric, never blended.</strong> A single “quality score” of 0.7 could be great retrieval + broken escalation, or the reverse — the blend hides which layer broke. So each number grades one layer:</p>
+  <table>
+    <tr><th>Metric</th><th>Grades</th><th>Now</th><th>Bar</th></tr>
+    <tr><td>recall@10</td><td>retrieval</td><td>0.775</td><td>≥ 0.9</td></tr>
+    <tr><td>false-answer rate</td><td>honesty on unanswerable</td><td class="good">0</td><td>= 0</td></tr>
+    <tr><td>T3 recall</td><td>escalation safety</td><td class="good">1.0</td><td>= 1.0</td></tr>
+    <tr><td>citation validity</td><td>no invented citations</td><td class="good">clean</td><td>= 0 invalid</td></tr>
+    <tr><td>fact-match</td><td>answer completeness</td><td class="warnc">~0.15, noisy</td><td>≥ 0.8</td></tr>
+  </table>
+  <div class="note"><b>Why the asterisk on fact-match.</b> This week we found the number <em>swings</em> run-to-run (1/18 one run, 3/18 the next — on identical code), because a borderline answer flips between “answered” and “abstained.” You can't optimise against a jittery number, so the eval now runs each fact case a few times and reports the <em>average</em> pass-rate (<code>EVAL_REPEAT</code>), which is stable. To keep cost down it also runs a curated 30-case subset by default (<code>EVAL_SAMPLE</code>) that keeps every fact case.</div>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../evals/golden.json">evals/golden.json</a>
+    <a class="file" href="../evals/golden-schema.ts">evals/golden-schema.ts</a>
+    <a class="file" href="../evals/run.ts">evals/run.ts</a>
+    <a class="file" href="../evals/answer.eval.test.ts">evals/answer.eval.test.ts</a>
+    <a class="file" href="../app/admin/evals/">app/admin/evals/</a>
+  </div>
+</section>
+
+<section id="flywheel">
+  <h2>11 · The self-improvement flywheel <span class="pill t">new this week</span></h2>
+  <p class="lead">The system now learns from its own failures. <strong>A production failure becomes a test case; the test case gates every future change; the same failure can never silently return.</strong></p>
+  <div class="flow">
+    <span class="node">👎 in the app</span><span class="arr">→</span>
+    <span class="node">Triage queue<small>/admin/triage</small></span><span class="arr">→</span>
+    <span class="gate">Haiku pre-drafts labels<small>a speed-up, not the truth</small></span><span class="arr">→</span>
+    <span class="node" style="border-color:var(--rust)">⚠️ you approve every label</span><span class="arr">→</span>
+    <span class="node">Golden set<small>version bumps</small></span><span class="arr">→</span>
+    <span class="node">CI gates it forever</span>
+  </div>
+  <p><strong>Why a golden set that never grows is a depreciating asset:</strong> the law gets amended, sellers phrase things in new ways, models get upgraded — a frozen test set quietly tests <em>yesterday's</em> product. Every real failure you capture permanently raises the floor.</p>
+  <div class="note"><b>⚠️ Your one rule here.</b> Haiku <em>pre-drafts</em> the labels to save you typing, but you approve/correct <em>every field</em> — because these labels feed zero-tolerance gates. A wrong “expected fact” wouldn't just miss; it would teach CI to enforce a <em>wrong</em> answer forever. (The same three-tier rule: a model never fills a field that gates correctness.)</div>
+  <p><strong>CI (GitHub Actions):</strong> every pull request runs a <strong>25-case smoke test</strong> of the absolute gates (T3 recall, false-answer, citation validity) as a <em>hard block</em> — you can't merge a change that breaks them. The full suite runs nightly as a trend line.</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../app/admin/triage/page.tsx">app/admin/triage/page.tsx</a>
+    <a class="file" href="../app/api/triage/route.ts">app/api/triage/route.ts</a>
+    <a class="file" href="../lib/golden/predraft.ts">lib/golden/predraft.ts</a>
+    <a class="file" href="../lib/golden/append.ts">lib/golden/append.ts</a>
+    <a class="file" href="../evals/smoke.eval.test.ts">evals/smoke.eval.test.ts</a>
+    <a class="file" href="../.github/workflows/ci.yml">.github/workflows/ci.yml</a>
+  </div>
+  <div class="files"><span class="lbl">docs</span>
+    <a class="file" href="../docs/DASHBOARD.md">docs/DASHBOARD.md — the weekly numbers</a>
+    <a class="file" href="../docs/MODEL_CHANGE.md">docs/MODEL_CHANGE.md — swapping a model safely</a>
+  </div>
+</section>
+
+<section id="ui">
+  <h2>12 · The chat you see</h2>
+  <p>The product face: a thread of questions and cited answers. Citations render as <strong>expandable cards showing the exact quoted legal text</strong> — you verify the claim in place, without an act-of-faith click into a 200-page PDF. Every reply carries its risk tier, the “information, not advice” line, a “Talk to a CA” button on T2/T3, and 👍/👎 feedback (which is the fuel for the flywheel above). Redesigned this week into a calmer, document-like look — warm paper, a serif wordmark, one-tap example questions.</p>
+  <div class="files"><span class="lbl">code</span>
+    <a class="file" href="../app/page.tsx">app/page.tsx</a>
+    <a class="file" href="../app/globals.css">app/globals.css</a>
+    <a class="file" href="../app/api/feedback/route.ts">app/api/feedback/route.ts</a>
+  </div>
+</section>
+
+<section id="watch">
+  <h2>13 · Watching it think</h2>
+  <p>Nothing searches the corpus without leaving a flight-recorder entry — all retrieval flows through one traced function. The admin surfaces:</p>
+  <table>
+    <tr><th>Window</th><th>Shows</th></tr>
+    <tr><td><a class="file" href="../app/admin/conversations/">/admin/conversations</a></td><td>every prompt → reply, tier, feedback, Langfuse link</td></tr>
+    <tr><td><a class="file" href="../app/admin/triage/">/admin/triage</a></td><td>the 👎 → golden flywheel queue</td></tr>
+    <tr><td><a class="file" href="../app/admin/traces/">/admin/traces</a></td><td>per-query retrieval recorder: both channels, the RRF math, timings</td></tr>
+    <tr><td><a class="file" href="../app/admin/evals/">/admin/evals</a></td><td>golden-set runs, per-case hit/miss</td></tr>
+    <tr><td><a class="file" href="../app/admin/playground/">/admin/playground</a> · <a class="file" href="../app/admin/chunks/">/admin/chunks</a></td><td>search debugging · the law itself</td></tr>
+  </table>
+</section>
+
+<section id="state">
+  <h2>14 · Where it stands, honestly — and what's next</h2>
+  <p><span class="good">Solid:</span> the safety bars all hold — false-answer 0, T3 recall 1.0, citations always valid. And after Phase 8b the app <em>works</em> where it used to shrug: late fees, rates (incl. Hindi item words), registration, refunds, general math and change-over-time now answer, ask, or honestly abstain — instead of a blanket "sources don't cover this".</p>
+  <p><span class="good">What Phase 8b changed:</span> the biggest lever wasn't better retrieval — it was giving the agent a <strong>third move (ASK)</strong>, turning <em>facts</em> (rates) into pre-cited lookups instead of prose to be fished out, and making the citation gate <strong>drop the bad sentence instead of the whole answer</strong>. Together those un-stuck the classes that were wrongly abstaining.</p>
+  <p><span class="warnc">Honestly still open:</span></p>
+  <ol class="steps">
+    <li><b>The rate table is model-compiled and unverified</b> — a wrong rate is exactly the "confident false answer" we forbid. It's cited + hedged + flagged <code>verified:false</code>, but it needs a human sitting with the source PDFs.</li>
+    <li><b>Change-over-time is retrieval-bound</b> — it narrates a real timeline only when ≥2 dated docs are actually surfaced; the full historical rate change still wants the "schedule-row summaries" ingestion lever.</li>
+    <li><b>Evals are stale</b> — we built and verified by <em>running the app</em> this session (by request). The golden set doesn't yet cover the new lanes; re-baselining is the honest next step before trusting numbers again.</li>
+  </ol>
+  <div class="note"><b>⚠️ On your plate.</b> Verify the rate table (<a class="file" href="../lib/rates/table.ts">lib/rates/table.ts</a>) against the notifications · fix the Node-22 / preview-launch issue (corepack pnpm crashes under Node 18) · the earlier carryovers still stand (refund 👎 in <a href="../app/admin/triage/">/admin/triage</a>, GitHub remote + CI secrets, G2 threshold, golden verification sitting, Render deploy). All in <a class="file" href="../HANDOFF.md">HANDOFF.md</a>.</div>
+</section>
+
+<section id="map">
+  <h2>15 · Map of the code</h2>
+  <p>The fastest way in, by area:</p>
+  <table>
+    <tr><th>Area</th><th>Start here</th></tr>
+    <tr><td>The online brain</td><td><a class="file" href="../lib/agents/pipeline.ts">agents/pipeline.ts</a> → <a class="file" href="../lib/agents/answer.ts">answer.ts</a> · <a class="file" href="../lib/agents/intake.ts">intake.ts</a></td></tr>
+    <tr><td>Router · lanes · ASK <span class="pill t">8b</span></td><td><a class="file" href="../lib/agents/lanes.ts">agents/lanes.ts</a> · <a class="file" href="../lib/agents/clarify.ts">clarify.ts</a> · <a class="file" href="../lib/agents/lanes/">lanes/</a> · <a class="file" href="../lib/tools/registry.ts">tools/registry.ts</a></td></tr>
+    <tr><td>Rate table <span class="pill t">8b</span></td><td><a class="file" href="../lib/rates/table.ts">rates/table.ts</a> · <a class="file" href="../lib/rates/lookup.ts">rates/lookup.ts</a></td></tr>
+    <tr><td>Retrieval</td><td><a class="file" href="../lib/retrieval/search.ts">retrieval/search.ts</a> · <a class="file" href="../lib/retrieval/transform.ts">transform.ts</a> · <a class="file" href="../lib/retrieval/embed.ts">embed.ts</a></td></tr>
+    <tr><td>Gates &amp; calculators</td><td><a class="file" href="../lib/gates/verify-citations.ts">gates/verify-citations.ts</a> · <a class="file" href="../lib/calculators/">calculators/</a></td></tr>
+    <tr><td>Building the corpus</td><td><a class="file" href="../scripts/extract/extract.py">extract.py</a> · <a class="file" href="../lib/ingestion/chunk-acts.ts">chunk-acts.ts</a> · <a class="file" href="../scripts/embed-chunks.ts">embed-chunks.ts</a></td></tr>
+    <tr><td>The database</td><td><a class="file" href="../supabase/migrations/">supabase/migrations/</a> · <a class="file" href="../lib/supabase.ts">lib/supabase.ts</a></td></tr>
+    <tr><td>Evals &amp; CI</td><td><a class="file" href="../evals/run.ts">evals/run.ts</a> · <a class="file" href="../evals/golden.json">golden.json</a> · <a class="file" href="../.github/workflows/ci.yml">ci.yml</a></td></tr>
+    <tr><td>The flywheel</td><td><a class="file" href="../lib/golden/">lib/golden/</a> · <a class="file" href="../app/admin/triage/page.tsx">admin/triage</a></td></tr>
+    <tr><td>The UI</td><td><a class="file" href="../app/page.tsx">app/page.tsx</a></td></tr>
+    <tr><td>The story so far</td><td><a class="file" href="../LEARNING_LOG.md">LEARNING_LOG.md</a> · <a class="file" href="../HANDOFF.md">HANDOFF.md</a> · <a class="file" href="../CLAUDE.md">CLAUDE.md</a></td></tr>
+  </table>
+</section>
+
+<footer>GSTPilot — internal explainer · rebuilt to reflect the flywheel + retrieval fixes. *fact-match is the one open metric; see §14.</footer>
+
+</main>
+</div>
+
+<script>
+function rrf(){
+  var d=+document.getElementById('dr').value||0, k=+document.getElementById('kr').value||0;
+  var s=(d?1/(60+d):0)+(k?1/(60+k):0);
+  document.getElementById('rrfout').textContent='= '+(d?'1/'+(60+d):'0')+' + '+(k?'1/'+(60+k):'0')+' = '+s.toFixed(5);
+}
+rrf();
+</script>
+</body>
+</html>

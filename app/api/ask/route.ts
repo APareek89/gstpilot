@@ -12,6 +12,9 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { askGSTPilot } from "@/lib/agents/pipeline";
+import { loadMemory } from "@/lib/memory/store";
+import { extractAndStoreMemories } from "@/lib/memory/extract";
+import type { PendingState } from "@/lib/memory/working";
 import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -52,14 +55,27 @@ async function compactIfNeeded(threadId: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const { question, threadId: incoming } = await req.json();
+  const { question, threadId: incoming, userId } = await req.json();
   const s = getServiceClient();
 
   let threadId = incoming as string | undefined;
+  let pending: PendingState | null = null;
+  let threadUserId: string | null = (userId as string | undefined) ?? null;
   if (!threadId) {
-    const { data } = await s.from(`${TABLE_PREFIX}threads`).insert({ title: question.slice(0, 80) }).select("id").single();
+    // user_id on the thread is the join key for ALL memory: it's how this conversation's
+    // learnings get written to the right person, and their past learnings flow back in.
+    const { data } = await s.from(`${TABLE_PREFIX}threads`).insert({ title: question.slice(0, 80), user_id: threadUserId }).select("id").single();
     threadId = data!.id;
+  } else {
+    // Resuming a thread: the thread row is the source of truth for who owns it and for the
+    // persisted working memory (a clarification/confirmation we're mid-way through).
+    const { data: t } = await s.from(`${TABLE_PREFIX}threads`).select("user_id, pending").eq("id", threadId).single();
+    threadUserId = (t?.user_id as string | null) ?? threadUserId;
+    pending = (t?.pending as PendingState | null) ?? null;
   }
+  // Durable memory (behavioral facts + confirmed defaults) — null for anonymous users, and
+  // then every downstream step behaves exactly as it did before Phase 8c.
+  const memory = await loadMemory(threadUserId);
   const context = incoming ? await buildContext(threadId!) : "";
   await s.from(`${TABLE_PREFIX}messages`).insert({ thread_id: threadId, role: "user", content: question });
 
@@ -71,8 +87,17 @@ export async function POST(req: NextRequest) {
       try {
         const r = await askGSTPilot(question, {
           context,
+          threadId,   // → Langfuse sessionId, so a conversation's turns group into one session
+          userId: threadUserId ?? undefined, // → Langfuse userId + memory writes
+          memory,     // durable facts, injected as context/defaults (never as legal sources)
+          pending,    // working memory: resume a half-finished gather
           onStep: (st) => send({ type: "status", name: st.name, ok: st.ok }),
         });
+        // Persist the lane's working-memory instruction: an object saves the gather-in-progress,
+        // null clears a finished one, undefined leaves the stored state untouched.
+        if (r.pending !== undefined) {
+          await s.from(`${TABLE_PREFIX}threads`).update({ pending: r.pending }).eq("id", threadId);
+        }
         // citations: chunk id + heading + the exact legal text relied on (first 400 chars)
         const tagIds = [...new Set([...r.reply.matchAll(/\[([A-Z]+-[A-Z]+\/[A-Za-z0-9./-]+?)\]/g)].map((m) => m[1]))];
         const { data: chunks } = tagIds.length
@@ -87,6 +112,11 @@ export async function POST(req: NextRequest) {
         }).select("id").single();
         send({ type: "answer", messageId: saved?.id, reply: r.reply, tier: r.tier, escalated: r.escalated, abstained: r.abstained, citations, traceId: r.traceId });
         compactIfNeeded(threadId!).catch(() => {});
+        // Memory extraction runs AFTER the reply is on its way (it must never add latency), only
+        // for signed-in users, and skips escalated turns — a dispute exchange is not profile data.
+        if (threadUserId && !r.escalated) {
+          extractAndStoreMemories(threadUserId, threadId!, question, r.reply, r.traceId).catch(() => {});
+        }
       } catch (e) {
         send({ type: "error", message: (e as Error).message });
       }

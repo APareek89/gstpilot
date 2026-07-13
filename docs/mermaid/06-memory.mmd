@@ -1,0 +1,49 @@
+%% GSTPilot — MEMORY (Phase 8c): three types, one non-negotiable rule
+%% WORKING = this thread's live gather (pending, jsonb on the thread)
+%% BEHAVIORAL = durable facts about the user (user_memory, kind=behavioral)
+%% PROCEDURAL = confirmed per-user defaults (user_memory, kind=default)
+%% RULE: memory sets DEFAULTS/CONTEXT — it NEVER silently drives a rate/number/eligibility.
+flowchart TD
+  U(["YOU (signed in): 'late fee kitni hogi?'"]):::term --> LOAD
+
+  LOAD["LOAD MEMORY<br/>FUNCTION · route.ts + lib/memory/store.ts<br/>in: userId + threadId<br/>out: profile+facts (post-DECAY confidence) + thread PENDING"]:::fn --> INJ
+
+  PROFDB[("gstpilot_user_profile<br/>DATA · email, sells, state")]:::data -.-> LOAD
+  MEMDB[("gstpilot_user_memory<br/>DATA · fact, value, confidence,<br/>provenance, as_of, last_confirmed, kind")]:::data -.-> LOAD
+  THRDB[("gstpilot_threads.pending<br/>DATA · WORKING memory: {tool, values,<br/>assumed, missing, rejected}")]:::data -.-> LOAD
+
+  INJ["INJECT (3 places)<br/>FUNCTION · pipeline.ts<br/>1 intake context · 2 retrieval-rewrite hint · 3 slot pre-fill<br/>header forbids using memory as a legal source"]:::fn --> RESUME{"fresh pending<br/>on this thread?<br/>FUNCTION · isFresh (6h TTL)"}:::dec
+
+  RESUME -->|"yes — you're answering our last ask"| MERGE["MERGE working memory<br/>FUNCTION · calculation.ts<br/>in: pending.values + THIS turn's fillSlots extraction<br/>out: values (your words this turn always win)"]:::fn
+  RESUME -->|"no — a fresh question"| FILL["fillSlots (Phase 8b)<br/>AGENT · Haiku · clarify.ts<br/>extracts ONLY what YOU stated"]:::agent --> MERGE
+
+  MERGE --> STANCE{"assumptions shown<br/>last turn?<br/>FUNCTION · detectStance (regex)"}:::dec
+  STANCE -->|"corrected: 'nahi, nil tha'<br/>your value wins"| GRAD["GRADUATE / DROP<br/>FUNCTION · negation consumed by an explicit correction →<br/>untouched assumptions keep implicit consent;<br/>bare 'nahi' → ALL drop, asked cold, never re-proposed"]:::fn
+  STANCE -->|"'haan' / answered the gaps<br/>(implicit consent)"| GRAD
+  STANCE -->|"no assumptions pending"| MISS
+  GRAD --> MISS{"required slots<br/>still missing?<br/>FUNCTION"}:::dec
+
+  MISS -->|"yes → consult memory"| PROP["proposeDefaults<br/>FUNCTION · lib/memory/prefill.ts (NO model)<br/>in: missing slots + facts above CONF_USABLE 0.25<br/>out: ASSUMED values, each with its origin ('why')"]:::fn
+  PROP -->|"something to propose"| CONF["CONFIRMATION — confirm-not-ask<br/>FUNCTION · buildConfirmation()<br/>shows every assumption + origin + date, asks 'sahi hai?'<br/>+ only the genuinely unknown slots<br/>GATE: calculator does NOT run on unconfirmed assumptions"]:::ask
+  PROP -->|"nothing usable"| COLD["COLD ASK (Phase 8b)<br/>FUNCTION · buildClarification()"]:::ask
+  CONF --> SAVEP["SAVE pending<br/>FUNCTION · route.ts<br/>out: thread.pending = {values, assumed, missing, rejected}"]:::fn
+  COLD --> SAVEP
+  SAVEP -.->|"your NEXT message re-enters at LOAD"| U
+
+  MISS -->|"no → everything known & confirmed"| CALC["COMPUTE<br/>FUNCTION · calculators (deterministic, pre-cited)<br/>out: exact figure + citations · thread.pending CLEARED"]:::fn
+  CALC --> LEARN["rememberAllDefaults<br/>FUNCTION · every non-date slot → kind=default,<br/>confidence 0.9, last_confirmed=now (decay clock restarts)"]:::fn
+  LEARN -.-> MEMDB
+  CALC --> DONE(["cited answer in your chat"]):::term
+
+  DONE --> MEMX["MEMORY EXTRACT (after reply)<br/>AGENT · Haiku · lib/memory/extract.ts<br/>in: the exchange · out: durable facts, CLOSED set<br/>(sells/state/platforms/turnover_band/filing_frequency/observation:*)<br/>code validates keys; confidence starts 0.4; same value reinforces +0.1"]:::agent
+  MEMX -.-> MEMDB
+
+  PANEL["'JO MUJHE YAAD HAI' PANEL · /memory<br/>FUNCTION · view / edit (= confirm, 0.9) / DELETE<br/>shows post-decay % and 'as of' dates<br/>decay: confidence halves every 60 days unconfirmed"]:::fn
+  MEMDB -.-> PANEL
+
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;

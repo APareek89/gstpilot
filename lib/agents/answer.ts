@@ -10,9 +10,9 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { hybridSearch, type SearchResult } from "../retrieval/search";
-import { verifyCitations, ABSTAIN_PHRASE, type CitationCheck } from "../gates/verify-citations";
-import { gstrLateFee, delayedPaymentInterest } from "../calculators";
-import { getLangfuse } from "../observability/langfuse";
+import { verifyCitations, pruneUngrounded, ABSTAIN_PHRASE, type CitationCheck } from "../gates/verify-citations";
+import { gstrLateFee, delayedPaymentInterest, generalArithmetic, registrationThreshold, refundExportRule89 } from "../calculators";
+import { getLangfuse, recordGeneration, type LfParent } from "../observability/langfuse";
 import { getServiceClient, TABLE_PREFIX } from "../supabase";
 
 export const GENERATION_MODEL = "claude-sonnet-4-6"; // pinned — changing it is an eval'd migration
@@ -24,6 +24,7 @@ export type AnswerResult = {
   gate: CitationCheck | null;
   regenerated: boolean;
   retrieval: SearchResult;
+  needsClarification: boolean;   // transform judged the question un-interpretable as written
 };
 
 const TOOLS: Anthropic.Tool[] = [
@@ -54,6 +55,44 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["tax_amount_inr", "due_date", "payment_date"],
     },
   },
+  {
+    name: "general_arithmetic",
+    description: "Do exact arithmetic — ALWAYS use this instead of computing any number in prose (e.g. GST = value × rate). ops: multiply, sum, subtract, divide, percent_of (values = [percent, base]). Returns no citation; cite the RATE/rule source on the sentence, not this tool.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        op: { type: "string", enum: ["multiply", "sum", "subtract", "divide", "percent_of"] },
+        values: { type: "array", items: { type: "number" } },
+      },
+      required: ["op", "values"],
+    },
+  },
+  {
+    name: "registration_threshold",
+    description: "Check if a seller must register for GST under section 22 (aggregate-turnover thresholds). ALWAYS use this instead of stating the threshold from memory.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        annual_turnover_inr: { type: "number" },
+        supply_type: { type: "string", enum: ["goods", "services", "both"] },
+        special_category_state: { type: "boolean" },
+      },
+      required: ["annual_turnover_inr", "supply_type", "special_category_state"],
+    },
+  },
+  {
+    name: "refund_export_rule89",
+    description: "Compute the export/zero-rated ITC refund under Rule 89(4): (zero-rated turnover × net ITC) ÷ adjusted total turnover. ALWAYS use this instead of computing the refund yourself.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        zero_rated_turnover_inr: { type: "number" },
+        net_itc_inr: { type: "number" },
+        adjusted_total_turnover_inr: { type: "number" },
+      },
+      required: ["zero_rated_turnover_inr", "net_itc_inr", "adjusted_total_turnover_inr"],
+    },
+  },
 ];
 
 const SYSTEM = `You are GSTPilot, answering Indian GST questions for small e-commerce sellers, STRICTLY from the source blocks provided.
@@ -72,7 +111,11 @@ Tags: cite with the source id EXACTLY as given in its id attribute, e.g. [CGST-A
 Completeness: when a source states the specific number, deadline, form name or condition that answers the question, INCLUDE it — a correct answer names the specifics, not just the rule's existence.`;
 
 // Generation reads FULL chunk text (capped per chunk), not the 200-char list snippets —
-// you cannot ground an answer in a preview.
+// you cannot ground an answer in a preview. The cap is 12,000 chars (~3k tokens): big enough
+// that a giant like s54/r89 delivers its whole refund procedure (the tail we now embed whole),
+// small enough that eight sources stay within a sane prompt budget. Was 4,500 — which truncated
+// exactly the sub-rule specifics fact_match needs.
+const GEN_SOURCE_CHARS = 12_000;
 async function sourcesBlock(retrieval: SearchResult): Promise<{ block: string; chunkTextById: Map<string, string> }> {
   const ids = retrieval.fused.map((c) => c.id);
   const { data } = await getServiceClient()
@@ -85,7 +128,7 @@ async function sourcesBlock(retrieval: SearchResult): Promise<{ block: string; c
     .map((id) => {
       const c = byId.get(id);
       return c
-        ? `<source id="${id}" heading="${(c.heading_path as string[]).join(" › ")}">\n${(c.text as string).slice(0, 4500)}\n</source>`
+        ? `<source id="${id}" heading="${(c.heading_path as string[]).join(" › ")}">\n${(c.text as string).slice(0, GEN_SOURCE_CHARS)}\n</source>`
         : "";
     })
     .filter(Boolean)
@@ -95,23 +138,28 @@ async function sourcesBlock(retrieval: SearchResult): Promise<{ block: string; c
 
 async function generate(
   anthropic: Anthropic,
-  messages: Anthropic.MessageParam[]
+  messages: Anthropic.MessageParam[],
+  parent?: LfParent
 ): Promise<{ text: string; toolCitationIds: string[]; toolOutputs: string[] }> {
   // Tool loop: the model proposes a calculation, code executes it, the model continues.
   // Calculators return the citation ids of THEIR legal basis (s47, the late-fee cap
   // notifications). Those are code-vouched sources — as trustworthy as retrieval — so we
-  // collect them for the citation gate's allowed set.
+  // collect them for the citation gate's allowed set. Each round is recorded as a generation
+  // node so the sonnet call (and any tool round) is visible in the trace tree.
   const toolCitationIds = new Set<string>();
   const toolOutputs: string[] = [];
   for (let round = 0; round < 4; round++) {
-    const res = await anthropic.messages.create({
-      model: GENERATION_MODEL,
-      max_tokens: 1200,
-      temperature: 0,
-      system: SYSTEM,
-      tools: TOOLS,
-      messages,
-    });
+    const res = await recordGeneration(parent,
+      { name: round === 0 ? "sonnet-generation" : `sonnet-tool-round-${round}`, model: GENERATION_MODEL, input: messages },
+      () => anthropic.messages.create({
+        model: GENERATION_MODEL,
+        max_tokens: 1200,
+        temperature: 0,
+        system: SYSTEM,
+        tools: TOOLS,
+        messages,
+      }),
+      (r) => ({ output: r.content, inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens }));
     if (res.stop_reason !== "tool_use") {
       return {
         text: res.content.filter((b) => b.type === "text").map((b: any) => b.text).join("\n"),
@@ -126,6 +174,9 @@ async function generate(
       const out =
         block.name === "gstr_late_fee" ? gstrLateFee(block.input as any)
         : block.name === "delayed_payment_interest" ? delayedPaymentInterest(block.input as any)
+        : block.name === "general_arithmetic" ? generalArithmetic(block.input as any)
+        : block.name === "registration_threshold" ? registrationThreshold(block.input as any)
+        : block.name === "refund_export_rule89" ? refundExportRule89(block.input as any)
         : { error: "unknown tool" };
       if ("citation_ids" in out) out.citation_ids.forEach((id) => toolCitationIds.add(id));
       toolOutputs.push(JSON.stringify(out));
@@ -138,12 +189,19 @@ async function generate(
 
 export type ResolveExtras = { toolOutputs: string[]; chunkTextById: Map<string, string> };
 
-export async function answerQuestion(question: string, extraFeedback?: string, context?: string): Promise<AnswerResult & ResolveExtras> {
+// `userHint` (Phase 8c): the durable-memory block for a signed-in user. It flows to the query
+// transform (bias retrieval toward their business) and into the generation context as labelled
+// background. It never weakens the gate: legal claims still cite retrieved chunks only.
+export async function answerQuestion(question: string, extraFeedback?: string, context?: string, parent?: LfParent, userHint?: string): Promise<AnswerResult & ResolveExtras> {
   const lf = getLangfuse();
-  const trace = lf.trace({ name: "answer", input: question });
+  // Nest under the turn's trace when we're part of the pipeline (so it's ONE trace, not a stray
+  // second "answer" trace); create our own only when called standalone (e.g. an eval).
+  const ownsTrace = !parent;
+  const root = parent ?? lf.trace({ name: "answer", input: question });
+  const span = root.span({ name: extraFeedback ? "resolution-retry" : "resolution", input: question });
 
-  const retrieval = await hybridSearch(question, "agent");
-  trace.event({ name: "retrieval", metadata: { traceId: retrieval.traceId, top: retrieval.fused.map((c) => c.id) } });
+  const retrieval = await hybridSearch(question, "agent", span, userHint);
+  span.event({ name: "retrieval", metadata: { traceId: retrieval.traceId, top: retrieval.fused.map((c) => c.id) } });
 
   const providedIds = retrieval.fused.map((c) => c.id);
   const anthropic = new Anthropic();
@@ -151,12 +209,12 @@ export async function answerQuestion(question: string, extraFeedback?: string, c
   const baseMessages: Anthropic.MessageParam[] = [
     {
       role: "user",
-      content: `${block}\n\n${context ? `Conversation so far (for reference):\n${context}\n\n` : ""}User question (answer THIS, in their words): ${question}${extraFeedback ? `\n\nIMPORTANT prior-attempt feedback to fix: ${extraFeedback}` : ""}`,
+      content: `${block}\n\n${userHint ? `${userHint}\n\n` : ""}${context ? `Conversation so far (for reference):\n${context}\n\n` : ""}User question (answer THIS, in their words): ${question}${extraFeedback ? `\n\nIMPORTANT prior-attempt feedback to fix: ${extraFeedback}` : ""}`,
     },
   ];
 
-  const genSpan = trace.span({ name: "generation-1" });
-  const gen1 = await generate(anthropic, baseMessages);
+  const genSpan = span.span({ name: "generation-1" });
+  const gen1 = await generate(anthropic, baseMessages, genSpan);
   let answer = gen1.text;
   genSpan.end({ output: answer });
 
@@ -172,12 +230,12 @@ export async function answerQuestion(question: string, extraFeedback?: string, c
       ...gate.untagged_sentences.map((s) => `This claim has no citation tag: "${s}"`),
       `Your ONLY allowed tags are: ${allowedIds.map((id) => `[${id}]`).join(" ")}`,
     ].join("\n");
-    const regenSpan = trace.span({ name: "generation-2-named-errors" });
+    const regenSpan = span.span({ name: "generation-2-named-errors" });
     const gen2 = await generate(anthropic, [
       ...baseMessages,
       { role: "assistant", content: answer },
       { role: "user", content: `Your answer failed the citation check:\n${errors}\n\nRewrite the full answer fixing exactly these problems. Same rules apply. If you cannot support a claim from the sources, replace it with: "${ABSTAIN_PHRASE}"` },
-    ]);
+    ], regenSpan);
     answer = gen2.text;
     regenSpan.end({ output: answer });
     allowedIds = [...allowedIds, ...gen2.toolCitationIds];
@@ -189,17 +247,34 @@ export async function answerQuestion(question: string, extraFeedback?: string, c
   // answering the rest (rule 2 encourages that) is a partial answer, not an abstention.
   let abstained = answer.toLowerCase().includes(ABSTAIN_PHRASE) && gate.cited.length === 0;
   if (!gate.ok) {
-    // Second failure: abstention is mandatory — an uncited legal answer never ships.
-    answer = `${ABSTAIN_PHRASE.charAt(0).toUpperCase() + ABSTAIN_PHRASE.slice(1)}. Aap kisi CA se consult kar sakte hain is sawal ke liye.`;
-    abstained = true;
+    // Gentler enforcement (was: discard the whole answer on any gate failure — the over-abstention
+    // that suppressed nearly every RAG answer). Drop ONLY the ungrounded/fake-cited sentences and
+    // keep the properly-cited remainder. Full abstention ONLY if nothing grounded survives. The
+    // hard safety holds: no uncited or invented-citation claim ever reaches the user.
+    const pruned = pruneUngrounded(answer, allowedIds);
+    if (pruned.hasGroundedClaim) {
+      answer = pruned.text;
+      gate = verifyCitations(answer, allowedIds);
+      abstained = answer.toLowerCase().includes(ABSTAIN_PHRASE) && gate.cited.length === 0;
+    } else {
+      answer = `${ABSTAIN_PHRASE.charAt(0).toUpperCase() + ABSTAIN_PHRASE.slice(1)}. Aap kisi CA se consult kar sakte hain is sawal ke liye.`;
+      abstained = true;
+    }
   }
 
-  trace.update({ output: answer, metadata: { abstained, regenerated, gate_ok: gate.ok, cited: gate.cited } });
-  trace.score({ name: "citation_gate", value: gate.ok ? 1 : 0 });
-  await lf.flushAsync().catch(() => {});
+  span.end({ output: answer, metadata: { abstained, regenerated, gate_ok: gate.ok, cited: gate.cited } });
+  // Score the citation gate on the turn's trace (works whether we own it or it's the pipeline's).
+  if ("score" in root && typeof (root as { score?: unknown }).score === "function") {
+    (root as { score: (b: { name: string; value: number }) => void }).score({ name: "citation_gate", value: gate.ok ? 1 : 0 });
+  }
+  if (ownsTrace) {
+    (root as { update: (b: { output: string }) => void }).update({ output: answer });
+    await lf.flushAsync().catch(() => {}); // standalone: flush now; in-pipeline the pipeline flushes
+  }
 
   return {
     answer, abstained, citations: gate.cited, gate, regenerated, retrieval,
+    needsClarification: retrieval.transformation.needs_clarification,
     toolOutputs: [...gen1.toolOutputs, ...(regenerated ? [] : [])],
     chunkTextById,
   };

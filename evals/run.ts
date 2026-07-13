@@ -39,9 +39,10 @@ export type EvalReport = {
     misses: { id: string; question: string }[];
   };
   answers?: {
-    fact_match_rate: number;                    // verified facts present (normalized substring)
+    fact_match_rate: number;                    // MEAN pass-rate over fact cases across EVAL_REPEAT runs (stable; = old fraction at N=1)
     poison_rate: number;                        // answers containing a must_not_contain string
     false_answer_rate: number;                  // UNANSWERABLE slice: answered instead of abstaining
+    fact_detail?: { id: string; passes: number; runs: number }[]; // per-case pass count — surfaces the flaky cases
   };
   tiers?: {
     accuracy: number;
@@ -76,12 +77,37 @@ function normFact(t: string): string {
 // Abstention detector for the false-answer metric: the honest "sources don't cover this".
 const ABSTAIN_MARKERS = ["don't cover", "do not cover", "cannot answer", "consult a ca", "outside the scope", "not covered by"];
 
+// A cost-controlled subset for fast iteration. The full 60-case set costs ~$2-4 of API
+// spend per answer-eval run, so day-to-day we run a curated N (default from EVAL_SAMPLE).
+// The pick is DETERMINISTIC and metric-preserving, in priority order:
+//   1. every fact case (expected_answer_facts) — these are the ONLY cases that move
+//      fact_match, so keeping all of them makes a sampled run's fact_match directly
+//      comparable to the full run (same numerator/denominator).
+//   2. unanswerable cases — the false-answer bar is the product's strictest metric.
+//   3. remaining answerable — poison coverage, only if budget remains.
+// It never silently hides scope: the caller logs the count, and EvalReport.cases records it.
+function sampleGolden(cases: GoldenCase[], n: number): GoldenCase[] {
+  const fact = cases.filter((c) => !c.unanswerable && c.expected_answer_facts.length > 0);
+  const unanswerable = cases.filter((c) => c.unanswerable);
+  const otherAnswerable = cases.filter((c) => !c.unanswerable && c.expected_answer_facts.length === 0);
+  return [...fact, ...unanswerable, ...otherAnswerable].slice(0, n);
+}
+
 export function loadGolden(opts: { verifiedOnly?: boolean } = {}): GoldenCase[] {
   const all: GoldenCase[] = JSON.parse(
     readFileSync(join(process.cwd(), "evals", "golden.json"), "utf8")
   ).cases;
   const active = all.filter((c) => c.status !== "retired");
-  return opts.verifiedOnly ? active.filter((c) => c.status === "verified") : active;
+  const filtered = opts.verifiedOnly ? active.filter((c) => c.status === "verified") : active;
+
+  // EVAL_SAMPLE=30 → run a curated 30-case subset (see sampleGolden). Unset/0/≥total → full set.
+  const n = Number(process.env.EVAL_SAMPLE ?? 0);
+  if (!n || n >= filtered.length) return filtered;
+  const sample = sampleGolden(filtered, n);
+  const facts = sample.filter((c) => c.expected_answer_facts.length > 0).length;
+  const unans = sample.filter((c) => c.unanswerable).length;
+  console.log(`[loadGolden] EVAL_SAMPLE=${n}: running ${sample.length}/${filtered.length} cases (${facts} fact, ${unans} unanswerable, ${sample.length - facts - unans} other answerable)`);
+  return sample;
 }
 
 export async function runEval(sut: SystemUnderTest, cases: GoldenCase[]): Promise<EvalReport> {
@@ -119,26 +145,43 @@ export async function runEval(sut: SystemUnderTest, cases: GoldenCase[]): Promis
   }
 
   if (sut.answer) {
+    // Fact cases flip pass↔abstain run-to-run (near-temp-0 tag variance the gate amplifies into
+    // a binary), so single-run fact_match is ±2/18 noise. EVAL_REPEAT>1 runs each fact case N
+    // times and reports the MEAN pass-rate — averaging collapses the variance, and per-case
+    // pass counts (fact_detail) surface WHICH cases are flaky. Unanswerable + poison stay
+    // single-run: false_answer=0 and poison=0 are already stable, so repeating them is wasted spend.
+    const repeat = Math.max(1, Number(process.env.EVAL_REPEAT ?? 1));
     const answerable = cases.filter((c) => !c.unanswerable);
     const unanswerable = cases.filter((c) => c.unanswerable);
-    let factCases = 0, factOk = 0, poisoned = 0, falseAnswers = 0;
+    let factCases = 0, factRateSum = 0, poisoned = 0, falseAnswers = 0;
+    const fact_detail: { id: string; passes: number; runs: number }[] = [];
     for (const c of answerable) {
-      const a = norm(await sut.answer(c.question));
+      const runs = c.expected_answer_facts.length ? repeat : 1;
+      let factPasses = 0, poisonedHere = false;
+      for (let r = 0; r < runs; r++) {
+        const a = norm(await sut.answer(c.question));
+        if (c.expected_answer_facts.length) {
+          const aFact = normFact(a);
+          if (c.expected_answer_facts.every((f) => aFact.includes(normFact(f)))) factPasses++;
+        }
+        if (c.must_not_contain.some((m) => a.includes(norm(m)))) poisonedHere = true;
+      }
       if (c.expected_answer_facts.length) {
         factCases++;
-        const aFact = normFact(a);
-        if (c.expected_answer_facts.every((f) => aFact.includes(normFact(f)))) factOk++;
+        factRateSum += factPasses / runs;                 // this case's pass-rate contributes to the mean
+        fact_detail.push({ id: c.id, passes: factPasses, runs });
       }
-      if (c.must_not_contain.some((m) => a.includes(norm(m)))) poisoned++;
+      if (poisonedHere) poisoned++;
     }
     for (const c of unanswerable) {
       const a = norm(await sut.answer(c.question));
       if (!ABSTAIN_MARKERS.some((m) => a.includes(m))) falseAnswers++;
     }
     report.answers = {
-      fact_match_rate: factCases ? +(factOk / factCases).toFixed(3) : NaN,
+      fact_match_rate: factCases ? +(factRateSum / factCases).toFixed(3) : NaN,
       poison_rate: +(poisoned / answerable.length).toFixed(3),
       false_answer_rate: +(falseAnswers / Math.max(unanswerable.length, 1)).toFixed(3),
+      fact_detail,
     };
   }
 

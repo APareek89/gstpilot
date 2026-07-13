@@ -4,13 +4,82 @@
 
 import { Langfuse } from "langfuse";
 
-let client: Langfuse | null = null;
+// Store the client on globalThis, NOT a plain module variable. In Next.js dev, editing any file
+// hot-reloads modules and RESETS a plain `let client` — which orphans the old client's queued
+// events (the trace gets an id and is returned to the UI, but its flush never lands → "Trace not
+// found" in Langfuse). Pinning it to globalThis means every hot-reloaded copy of this module shares
+// ONE client, so create-trace and flush always hit the same queue.
+const g = globalThis as unknown as { __gstpilot_lf?: Langfuse };
+
+// A "parent" is anything a child observation can hang under: the turn's trace, or a span inside
+// it. We derive the types from the SDK (no reliance on named exports) so a generation nests under
+// whichever we pass. This is what turns the flat event list into a real NODE TREE in Langfuse.
+type LfTrace = ReturnType<Langfuse["trace"]>;
+type LfSpan = ReturnType<LfTrace["span"]>;
+export type LfParent = LfTrace | LfSpan;
+
+// recordGeneration — run a model call AND record it as a Langfuse generation node under `parent`,
+// capturing model + input + output + token usage so the call is visible (and costed) in the trace
+// tree. Best-effort: with no parent it just runs `fn` (standalone/eval paths keep working). The
+// `extract` maps the call's result to what the node should show — kept generic so every model call
+// (haiku classifier, sonnet generation, …) uses the same one helper.
+export async function recordGeneration<T>(
+  parent: LfParent | undefined,
+  meta: { name: string; model: string; input: unknown },
+  fn: () => Promise<T>,
+  extract?: (r: T) => { output?: unknown; inputTokens?: number; outputTokens?: number }
+): Promise<T> {
+  const gen = parent?.generation({ name: meta.name, model: meta.model, input: meta.input });
+  try {
+    const r = await fn();
+    const e = extract?.(r);
+    gen?.end({
+      output: e?.output,
+      ...(e && (e.inputTokens != null || e.outputTokens != null)
+        ? { usageDetails: { input: e.inputTokens ?? 0, output: e.outputTokens ?? 0 } }
+        : {}),
+    });
+    return r;
+  } catch (err) {
+    gen?.end({ level: "ERROR", statusMessage: (err as Error).message });
+    throw err;
+  }
+}
 
 export function getLangfuse(): Langfuse {
-  client ??= new Langfuse({
+  g.__gstpilot_lf ??= new Langfuse({
     publicKey: process.env.LANGFUSE_PUBLIC_KEY,
     secretKey: process.env.LANGFUSE_SECRET_KEY,
     baseUrl: process.env.LANGFUSE_HOST ?? "https://cloud.langfuse.com",
   });
-  return client;
+  return g.__gstpilot_lf;
+}
+
+export function langfuseHost(): string {
+  return process.env.LANGFUSE_HOST ?? "https://cloud.langfuse.com";
+}
+
+// Langfuse CLOUD trace URLs require the project segment — /project/<id>/traces/<id>. A bare
+// /traces/<id> 404s (that was the broken link). The project id isn't in our env, but Langfuse
+// exposes it via the public API using the keys we already have; we fetch it ONCE and cache it.
+// Server-side only (uses the secret key). Env var LANGFUSE_PROJECT_ID short-circuits the fetch.
+let cachedProjectId: string | null | undefined;
+export async function getLangfuseProjectId(): Promise<string | null> {
+  if (cachedProjectId !== undefined) return cachedProjectId;
+  if (process.env.LANGFUSE_PROJECT_ID) return (cachedProjectId = process.env.LANGFUSE_PROJECT_ID);
+  try {
+    const auth = Buffer.from(`${process.env.LANGFUSE_PUBLIC_KEY}:${process.env.LANGFUSE_SECRET_KEY}`).toString("base64");
+    const res = await fetch(`${langfuseHost()}/api/public/projects`, { headers: { Authorization: `Basic ${auth}` } });
+    const j = (await res.json()) as { data?: { id: string }[] };
+    return (cachedProjectId = j?.data?.[0]?.id ?? null);
+  } catch {
+    return (cachedProjectId = null); // fall back to the bare URL rather than throw
+  }
+}
+
+// The correct, clickable trace URL. Falls back to the (imperfect) bare URL only if the project
+// id can't be resolved — never returns nothing.
+export async function langfuseTraceUrl(traceId: string): Promise<string> {
+  const pid = await getLangfuseProjectId();
+  return pid ? `${langfuseHost()}/project/${pid}/traces/${traceId}` : `${langfuseHost()}/traces/${traceId}`;
 }

@@ -16,7 +16,9 @@
     "golden:validate": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" tsx scripts/validate-golden.ts",
     "eval": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/retrieval.eval.test.ts",
     "langfuse:sync": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" tsx scripts/langfuse-sync.ts",
-    "eval:answer": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/answer.eval.test.ts"
+    "eval:answer": "EVAL_SAMPLE=30 EVAL_REPEAT=3 NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/answer.eval.test.ts",
+    "eval:answer:full": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/answer.eval.test.ts",
+    "eval:smoke": "NODE_EXTRA_CA_CERTS=\"/Users/anandpareek/Documents/SEO content Skill/scripts/system-ca-bundle.pem\" vitest run evals/smoke.eval.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -24,6 +26,7 @@
     "@supabase/supabase-js": "^2.110.0",
     "dotenv": "^17.4.2",
     "langfuse": "^3.38.20",
+    "mermaid": "^11.16.0",
     "next": "15.5.20",
     "react": "19.1.0",
     "react-dom": "19.1.0",

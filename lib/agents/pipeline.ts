@@ -8,9 +8,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { classifyIntake, caHandoff, type Intake } from "./intake";
 import { answerQuestion } from "./answer";
+import { runCalculationLane } from "./lanes/calculation";
+import { runRateLane } from "./lanes/rate";
+import { runTimelineLane } from "./lanes/timeline";
+import { runGuidanceLane } from "./lanes/guidance";
+import { reconcileLane, type Lane, type LaneOutcome, type LaneExtras } from "./lanes";
+import { isFresh, detectStance, type PendingState } from "../memory/working";
+import { memoryContextBlock, type MemoryBundle } from "../memory/store";
 import { ABSTAIN_PHRASE } from "../gates/verify-citations";
 import { recomputeNumbers } from "../gates/g3-recompute";
-import { getLangfuse } from "../observability/langfuse";
+import { getLangfuse, recordGeneration } from "../observability/langfuse";
+
+const HAIKU = "claude-haiku-4-5-20251001";
 
 // G2 threshold: max dense cosine of the retrieval's best chunk. PLACEHOLDER until Anand
 // tunes it on the golden score distributions (his ⚠️ task) — see docs/GATES.md.
@@ -25,6 +34,9 @@ export type PipelineResult = {
   escalated: boolean;   // T3 → CA handoff
   abstained: boolean;
   trajectory: TrajectoryStep[];
+  // Working-memory instruction back to the route: object = persist on the thread, null = clear,
+  // undefined = leave whatever is stored untouched.
+  pending?: PendingState | null;
 };
 
 const REPLY_PROMPT = (question: string, resolution: string) => `Rewrite this approved GST resolution as a short, warm reply to a small-business seller. KEEP every [SOURCE-ID] tag exactly where its claim is; keep all numbers exactly; keep the exact phrase "${ABSTAIN_PHRASE}" if present; same language mix as the user. Plain sentences and "- " bullets ONLY — no markdown headings, no bold, no tables. No new information — you may only rephrase.
@@ -41,11 +53,22 @@ ${resolution}
 REPLY:
 ${reply}`;
 
-export type PipelineOpts = { context?: string; onStep?: (s: TrajectoryStep) => void };
+export type PipelineOpts = {
+  context?: string;
+  onStep?: (s: TrajectoryStep) => void;
+  threadId?: string;
+  userId?: string;              // → Langfuse userId: every trace attributable to a person
+  memory?: MemoryBundle | null; // durable memory (profile + facts), loaded by the route
+  pending?: PendingState | null; // the thread's persisted working memory (a gather in progress)
+};
 
 export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Promise<PipelineResult> {
   const lf = getLangfuse();
-  const trace = lf.trace({ name: "pipeline", input: question });
+  // ONE trace per user turn. sessionId = the conversation thread → Langfuse groups every turn of a
+  // conversation into one SESSION (the "see the whole session" view). All sub-steps (intake, the
+  // sonnet generation, gates, reply) nest UNDER this trace as generation nodes — no more a second
+  // stray "answer" trace per turn.
+  const trace = lf.trace({ name: "pipeline", input: question, sessionId: opts.threadId, userId: opts.userId });
   const trajectory: TrajectoryStep[] = [];
   let n = 0;
   const log = (name: string, ok: boolean, t0: number, note?: string) => {
@@ -56,8 +79,24 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
   };
 
   // 1. intake + G1 (zod inside classifyIntake; double-failure defaults to T3)
+  // Memory injection (a): the durable-memory block joins the intake input as CONTEXT — it helps
+  // the classifier read a vague question ("mera product" = footwear), and its header forbids
+  // using it as a source of rates/amounts. It is NOT merged into opts.context, which also feeds
+  // fillSlots — the slot extractor must only ever see the user's own words.
   let t0 = Date.now();
-  const { intake, g1_retries } = await classifyIntake(opts.context ? `${opts.context}\n\nCurrent question: ${question}` : question);
+  const memBlock = memoryContextBlock(opts.memory ?? null);
+  const intakeInput = [memBlock, opts.context ? `${opts.context}\n\nCurrent question: ${question}` : question].filter(Boolean).join("\n\n");
+  const { intake, g1_retries, serviceError } = await classifyIntake(intakeInput, trace);
+
+  // Service hiccup (not a real classification): say so honestly and let the user retry, rather
+  // than escalating a routine question to a CA on a transient API blip.
+  if (serviceError) {
+    const reply = "Abhi thodi technical dikkat aa rahi hai (service busy) — ek minute baad dobara try karein. Aapka sawaal safe hai, koi galat jawab nahi diya gaya.";
+    log("intake", false, t0, "service unavailable");
+    trace.update({ output: reply, metadata: { service_error: true } });
+    await lf.flushAsync().catch(() => {});
+    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory };
+  }
   log("intake", true, t0, `${intake.intent}/${intake.tier}`);
   log("G1-schema", g1_retries < 2, t0, g1_retries ? `retries=${g1_retries}` : undefined);
 
@@ -71,10 +110,69 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: true, abstained: false, trajectory };
   }
 
-  // 2+3. retrieval + resolution (answerQuestion = hybridSearch + grounded generation + G4)
+  // ROUTER: intake now also picks a LANE (the question's TYPE). T3 already short-circuited.
+  // The calculation lane owns the third move (ASK): it fills its calculator's inputs from the
+  // conversation, computes the exact figure when they're all present, or gives the general
+  // cited rule + an offer to compute when they're missing — never a bare abstention. Every
+  // OTHER lane still flows through the grounded RAG path below (unchanged for now).
   t0 = Date.now();
-  const res = await answerQuestion(question, undefined, opts.context);
+  let lane = reconcileLane(intake.intent, intake.lane, question);
+  // Working-memory override: when a calculation gather is pending on this thread and the user's
+  // message reads as a yes/no to our confirmation ("haan sahi hai" / "nahi, GSTR-1"), it belongs
+  // to that gather even if the classifier — seeing a three-word message — picked another lane.
+  if (isFresh(opts.pending) && lane !== "calculation" && detectStance(question) !== "neutral") {
+    lane = "calculation";
+  }
+  log("router", true, t0, lane === intake.lane ? lane : `${lane} (was ${intake.lane})`);
+
+  // Lanes that own their own deterministic answer (fact lookup / calculation / ASK). Each
+  // returns a LaneOutcome; the rest fall through to the grounded RAG path below.
+  const extras: LaneExtras = { memory: opts.memory ?? null, pending: opts.pending ?? null, threadId: opts.threadId, userId: opts.userId };
+  const laneHandlers: Partial<Record<Lane, (q: string, ctx: string | undefined, intent: string | undefined, parent?: import("../observability/langfuse").LfParent, extras?: LaneExtras) => Promise<LaneOutcome>>> = {
+    calculation: runCalculationLane,
+    rate_lookup: runRateLane,
+    change_over_time: runTimelineLane,
+    guidance: runGuidanceLane,
+  };
+  const handler = laneHandlers[lane];
+  if (handler) {
+    t0 = Date.now();
+    const laneSpan = trace.span({ name: `lane:${lane}`, input: question });
+    const outcome = await handler(question, opts.context, intake.intent, laneSpan, extras);
+    laneSpan.end({ output: outcome.reply, metadata: { mode: outcome.mode, note: outcome.note } });
+    log(`lane:${lane}`, true, t0, `${outcome.mode}${outcome.note ? ` — ${outcome.note}` : ""}`);
+    // Tidy: never show the internal [SOURCE-ID] placeholder, and drop any tag-only line left
+    // behind when a sentence was pruned (e.g. a lone "[CGST-RULES/r89]" from the RAG fallback).
+    const reply = outcome.reply
+      .replace(/\[SOURCE-ID\]/gi, "")
+      .replace(/^\s*(?:\[[A-Za-z-]+\/[^\]]+\]\s*)+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    trace.update({ output: reply, metadata: { lane, mode: outcome.mode } });
+    await lf.flushAsync().catch(() => {});
+    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: outcome.abstained, trajectory, pending: outcome.pending };
+  }
+
+  // 2+3. retrieval + resolution (answerQuestion = hybridSearch + grounded generation + G4).
+  // Pass the trace so retrieval + the sonnet generation nest under THIS turn's trace (before,
+  // answerQuestion opened a second, disconnected "answer" trace).
+  t0 = Date.now();
+  // Memory injection (b): the same memory block rides along as a retrieval/generation hint —
+  // it biases the query rewrite ("mera product" → footwear) and gives the generator background;
+  // the citation gate still forces every legal claim onto a retrieved chunk, memory or not.
+  const res = await answerQuestion(question, undefined, opts.context, trace, memBlock || undefined);
   log("retrieval", true, t0, res.retrieval.fused.slice(0, 3).map((c) => c.id).join(","));
+
+  // needs_clarification (blunt fallback): the transform judged the question un-interpretable
+  // as written. Unlike the schema-driven ask, it can't name what's missing — so we give a
+  // short generic nudge rather than abstain. Only fires when we ALSO couldn't ground an answer.
+  if (res.needsClarification && res.abstained) {
+    const reply = "Aapka sawal thoda aur spasht karein — konsa GST topic (rate, return, registration, refund…) aur kis cheez ke baare mein? Tabhi main sahi source se jawab de paunga.";
+    log("clarify", true, t0, "needs_clarification");
+    trace.update({ output: reply, metadata: { needs_clarification: true } });
+    await lf.flushAsync().catch(() => {});
+    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory };
+  }
 
   // G2: relevance floor — if even the BEST chunk is weakly related, generation ran on sand.
   const bestDense = res.retrieval.dense[0]?.score ?? 0;
@@ -95,7 +193,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
   if (!res.abstained) {
     let g3 = recomputeNumbers(draft, res.chunkTextById, res.toolOutputs);
     if (!g3.ok) {
-      const retry = await answerQuestion(question, `These figures failed number verification against their cited sources — fix or remove them:\n${g3.violations.join("\n")}`);
+      const retry = await answerQuestion(question, `These figures failed number verification against their cited sources — fix or remove them:\n${g3.violations.join("\n")}`, opts.context, trace, memBlock || undefined);
       draft = retry.answer;
       g3 = recomputeNumbers(draft, retry.chunkTextById, retry.toolOutputs);
       if (!g3.ok) draft = `${ABSTAIN_PHRASE.charAt(0).toUpperCase() + ABSTAIN_PHRASE.slice(1)}. Aap kisi CA se confirm kar lein.`;
@@ -110,15 +208,19 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
   if (!abstainedNow) {
     try {
       const anthropic = new Anthropic();
-      const rep = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001", max_tokens: 900, temperature: 0,
-        messages: [{ role: "user", content: REPLY_PROMPT(question, draft) }],
-      });
+      const rep = await recordGeneration(trace, { name: "reply-synthesis", model: HAIKU, input: draft },
+        () => anthropic.messages.create({
+          model: HAIKU, max_tokens: 900, temperature: 0,
+          messages: [{ role: "user", content: REPLY_PROMPT(question, draft) }],
+        }),
+        (r) => ({ output: r.content[0].type === "text" ? r.content[0].text : "", inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens }));
       const candidate = rep.content[0].type === "text" ? rep.content[0].text : draft;
-      const check = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001", max_tokens: 300, temperature: 0,
-        messages: [{ role: "user", content: G5_PROMPT(candidate, draft) }],
-      });
+      const check = await recordGeneration(trace, { name: "G5-claim-check", model: HAIKU, input: candidate },
+        () => anthropic.messages.create({
+          model: HAIKU, max_tokens: 300, temperature: 0,
+          messages: [{ role: "user", content: G5_PROMPT(candidate, draft) }],
+        }),
+        (r) => ({ output: r.content[0].type === "text" ? r.content[0].text : "", inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens }));
       const verdict = check.content[0].type === "text" ? check.content[0].text.trim() : "FAIL";
       const g5ok = verdict.toUpperCase().startsWith("PASS");
       log("reply-synthesis", true, t0);
@@ -131,6 +233,11 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
       log("reply-synthesis", false, t0, "reply layer failed — shipping resolution as-is");
     }
   }
+
+  // Safety net: the reply model can echo the literal "[SOURCE-ID]" placeholder from its own
+  // formatting instructions (seen on abstentions, which carry no real tags to keep). A user must
+  // never see internal notation — strip it and tidy the spacing it leaves behind.
+  reply = reply.replace(/\[SOURCE-ID\]/gi, "").replace(/[ \t]{2,}/g, " ").replace(/ +([.,;:])/g, "$1").trim();
 
   trace.update({ output: reply, metadata: { tier: intake.tier, abstained: abstainedNow } });
   await lf.flushAsync().catch(() => {});

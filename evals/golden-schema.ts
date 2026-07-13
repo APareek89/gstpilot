@@ -19,6 +19,10 @@ export const INTENTS = [
   "composition",        // composition scheme questions
   "place_of_supply",    // which state's tax / inter vs intra
   "notice_dispute",     // demands, penalties, appeals (T3 territory)
+  "general_guidance",   // practical how-to/drafting help (what to write in a field, an example
+                        // invoice description) — common practice, not a specific legal provision.
+                        // Added Phase 8c-fix: benign how-to questions had NO home in this enum, so
+                        // the classifier borrowed lane words ("procedure") → zod fail ×2 → wrong T3.
   "out_of_scope",       // not GST law in our corpus (income tax, SGST acts, customs…)
 ] as const;
 export type Intent = (typeof INTENTS)[number];
@@ -40,6 +44,7 @@ export type GoldenCase = {
   };
   status: "draft" | "verified" | "retired"; // only "verified" cases gate CI
   note?: string;
+  source_trace_id?: string;          // production provenance: the Langfuse/DB trace this case was captured from
 };
 
 // Plain validation (no schema library — readable, zero deps). Returns problems, [] = valid.

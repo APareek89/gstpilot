@@ -79,3 +79,43 @@ export function verifyCitations(answer: string, providedIds: string[]): Citation
     untagged_sentences,
   };
 }
+
+// pruneUngrounded — the gentler enforcement. The old policy was all-or-nothing: ONE untagged or
+// fake-cited sentence discarded the WHOLE answer (that's what suppressed almost every RAG answer).
+// This instead removes ONLY the offending sentences and keeps the properly-cited remainder. The
+// hard safety is preserved — a claim that is untagged, or cites a source retrieval never provided,
+// is still never shown to the user; it's just dropped rather than taking the good sentences with
+// it. Returns the cleaned text and whether any grounded claim survived (if none, the caller
+// abstains honestly). Same claim/exempt/bullet-inheritance rules as verifyCitations, so a sentence
+// the checker would accept is a sentence the pruner keeps.
+export function pruneUngrounded(answer: string, providedIds: string[]): { text: string; hasGroundedClaim: boolean } {
+  const provided = new Set(providedIds);
+  const outLines: string[] = [];
+  let hasGroundedClaim = false;
+  let blockHasTag = false;
+
+  for (const line of answer.split("\n")) {
+    if (!line.trim()) { blockHasTag = false; outLines.push(""); continue; }
+    // A line with a VALID tag opens/continues a bullet block whose sub-bullets may inherit it.
+    const lineHasValidTag = [...line.matchAll(TAG_RE)].some((m) => provided.has(m[1]));
+    if (lineHasValidTag) blockHasTag = true;
+    const isBullet = /^\s*[-•*]\s/.test(line);
+
+    const kept: string[] = [];
+    for (const sentence of line.split(/(?<=[.!])\s+/)) {
+      if (!sentence.trim()) continue;
+      if (isExempt(sentence) || !CLAIM_MARKERS.test(sentence)) { kept.push(sentence); continue; }
+      const tags = [...sentence.matchAll(TAG_RE)].map((m) => m[1]);
+      const hasInvalid = tags.some((t) => !provided.has(t));
+      const hasValid = tags.some((t) => provided.has(t));
+      const grounded = (hasValid || (isBullet && blockHasTag)) && !hasInvalid;
+      if (grounded) { kept.push(sentence); hasGroundedClaim = true; }
+      // else: drop this one sentence (untagged claim, or cites a source we never retrieved)
+    }
+    const rebuilt = kept.join(" ").trim();
+    if (rebuilt) outLines.push(rebuilt);
+  }
+
+  const text = outLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text, hasGroundedClaim };
+}

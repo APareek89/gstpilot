@@ -18,6 +18,7 @@
 //    Falls back to the original query on any failure — degraded, never blocked.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { recordGeneration, type LfParent } from "../observability/langfuse";
 
 export type Transformation = {
   original: string;
@@ -25,6 +26,7 @@ export type Transformation = {
   hyde: string | null;        // dense channel input (hypothetical answer), null on fallback
   exact_tokens: string[];     // verbatim-verified identifiers, appended to keyword input
   needs_clarification: boolean;
+  doc_type_hint: "statute" | "stream" | "any"; // which corpus layer anchors the answer → statute boost
   direct_ids: string[];       // identity references; search drops any that don't exist
 };
 
@@ -42,30 +44,33 @@ export function parseReferences(query: string): string[] {
   return [...ids];
 }
 
-const TRANSFORM_PROMPT = (q: string) => `You prepare Indian GST questions for a legal search engine. Output ONLY JSON:
+const TRANSFORM_PROMPT = (q: string, userHint?: string) => `You prepare Indian GST questions for a legal search engine. ${userHint ? `\n${userHint}\nUse this background ONLY to resolve vague references in the question (e.g. "mera product" → what they sell). If the question is already specific, ignore it entirely.\n` : ""}Output ONLY JSON:
 {"rewritten": "question in CGST/IGST Act vocabulary (expand: TCS -> collect tax at source; ITC -> input tax credit; Amazon/Flipkart/Meesho/Swiggy/Zomato/ECO -> electronic commerce operator; translate Hinglish)",
  "exact_tokens": ["identifiers copied VERBATIM from the question: form names, section/rule numbers, HSN codes, amounts, dates — [] if none"],
  "hypothetical_answer": "2-3 sentences of a PLAUSIBLE answer written in dry statutory register (as if quoting the Act/rules/notification). Invented details are fine — this is a search probe, never shown to anyone.",
- "needs_clarification": false or true (true only if the question cannot be safely interpreted at all)}
+ "needs_clarification": false or true (true only if the question cannot be safely interpreted at all),
+ "doc_type_hint": "statute" (answer lives in the Act/Rules — procedure, eligibility, definitions, refunds, registration, returns process, e-way bill, composition, place of supply) OR "stream" (answer depends on a specific rate/exemption/threshold NOTIFICATION or circular — a product's GST rate, exemption eligibility, late-fee cap amounts) OR "any" (unclear)}
 
 Question: ${q}`;
 
 let anthropic: Anthropic | null = null;
 
-export async function transformQuery(query: string): Promise<Transformation> {
+export async function transformQuery(query: string, parent?: LfParent, userHint?: string): Promise<Transformation> {
   const direct_ids = parseReferences(query);
   const fallback: Transformation = {
     original: query, rewritten: query, hyde: null,
-    exact_tokens: [], needs_clarification: false, direct_ids,
+    exact_tokens: [], needs_clarification: false, doc_type_hint: "any", direct_ids,
   };
   try {
     anthropic ??= new Anthropic();
-    const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 400,
-      temperature: 0,
-      messages: [{ role: "user", content: TRANSFORM_PROMPT(query) }],
-    });
+    const res = await recordGeneration(parent, { name: "transform-query", model: "claude-haiku-4-5-20251001", input: query },
+      () => anthropic!.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 400,
+        temperature: 0,
+        messages: [{ role: "user", content: TRANSFORM_PROMPT(query, userHint) }],
+      }),
+      (r) => ({ output: r.content[0].type === "text" ? r.content[0].text : "", inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens }));
     const raw = res.content[0].type === "text" ? res.content[0].text : "";
     const p = JSON.parse(raw.replace(/^```json?\s*|\s*```$/g, ""));
     const lowerQ = query.toLowerCase();
@@ -78,6 +83,7 @@ export async function transformQuery(query: string): Promise<Transformation> {
         .map(String)
         .filter((t: string) => t.length >= 2 && lowerQ.includes(t.toLowerCase())),
       needs_clarification: p.needs_clarification === true,
+      doc_type_hint: ["statute", "stream"].includes(p.doc_type_hint) ? p.doc_type_hint : "any",
       direct_ids,
     };
   } catch {
