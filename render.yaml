@@ -1,14 +1,19 @@
 # Render blueprint — what Render actually runs: on every git push, Render pulls the repo,
 # runs buildCommand in a container, then keeps startCommand alive behind its load balancer
-# (Supabase stays managed elsewhere; scripts/ stay local/CI). First boot downloads the
-# bge-m3 model (~600MB) into the instance disk — needs the 2GB "standard" instance, and
-# cold starts take ~1 min. If that hurts, the upgrade path is an embedding API provider.
+# (Supabase stays managed elsewhere; scripts/ stay local/CI).
+#
+# FREE-TIER SHAPE (portfolio deploy): embeddings come from Hugging Face's Inference API
+# (EMBEDDINGS_PROVIDER=hf-api) instead of the in-process bge-m3 — that drops RAM from ~1.5GB
+# to ~250MB so the app fits the free 512MB instance. Free-tier caveats to expect: the service
+# SPINS DOWN after ~15 idle minutes (first request after a quiet spell takes ~50s), and the
+# HF serverless model may add a warm-up retry on the first query. To run embeddings
+# in-process instead, set plan: standard and remove EMBEDDINGS_PROVIDER.
 
 services:
   - type: web
     name: gstpilot
     runtime: node
-    plan: standard          # bge-m3 in-process needs ~1.5GB RAM; starter (512MB) will OOM
+    plan: free              # portfolio mode — see header note for the standard-plan variant
     buildCommand: corepack enable pnpm && pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /
@@ -25,6 +30,10 @@ services:
         sync: false
       - key: LANGFUSE_SECRET_KEY
         sync: false
+      - key: HF_API_KEY
+        sync: false          # free huggingface.co token (read scope) — serves bge-m3 queries
+      - key: EMBEDDINGS_PROVIDER
+        value: hf-api        # query embeddings via HF API (free-tier RAM fit); unset = local
       - key: LANGFUSE_HOST
         value: https://cloud.langfuse.com
       - key: NODE_VERSION
