@@ -14,11 +14,19 @@ root must include both sibling projects and `node_modules` must contain the actu
 spans are not the workflow lifecycle—a root agent span plus an explicit terminal flush prevents completed
 requests from appearing permanently `running`.
 
-**Most likely to break later:** the SDK currently uses a local sibling link and a broad local Turbopack
-root; deployment needs a published/built package or workspace-safe distribution. On this machine the dev
-server also needs the existing `NODE_EXTRA_CA_CERTS` bundle or Supabase thread creation fails before the
-agent runs. The API route currently hides that insert error and dereferences `data!`; surface the database
-error before public beta.
+**Hosted deployment follow-up:** the first connector existed only in a local commit and depended on
+`link:../Projects/Blindspot_v1/packages/sdk`. Render checks out only the GSTPilot repository, so the
+neighbouring Mac folder could never exist in its build container. Deepest cause: `process` — local package
+linking was treated as distribution. Fix: build the publishable SDK, vendor the versioned 0.1.0 tarball
+inside GSTPilot, pin `package.json`/the lockfile to it, remove the read-only-host-incompatible Corepack shim
+step, and declare metadata + observe-only Render configuration. Prevention: every connector release must
+pass a clean install/build using only files tracked in the consuming repository before deployment.
+
+**Most likely to break later:** the vendored package is the fastest beta proof, not the public install
+experience; publish `@blindspot/sdk` to a package registry before onboarding unrelated repositories. On
+this machine the dev server also needs the existing `NODE_EXTRA_CA_CERTS` bundle or Supabase thread
+creation fails before the agent runs. The API route currently hides that insert error and dereferences
+`data!`; surface the database error before public beta.
 
 ## Session 8c — 2026-07-10 (Phase 8c: agent memory + lightweight sign-up — ask → CONFIRM)
 

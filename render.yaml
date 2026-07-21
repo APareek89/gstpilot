@@ -14,7 +14,7 @@ services:
     name: gstpilot
     runtime: node
     plan: free              # portfolio mode — see header note for the standard-plan variant
-    buildCommand: corepack enable pnpm && pnpm install --frozen-lockfile && pnpm build
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /
     envVars:
@@ -36,5 +36,15 @@ services:
         value: hf-api        # query embeddings via HF API (free-tier RAM fit); unset = local
       - key: LANGFUSE_HOST
         value: https://cloud.langfuse.com
+      - key: BLINDSPOT_API_KEY
+        sync: false            # server-only Blindspot project key
+      - key: BLINDSPOT_BASE_URL
+        value: https://blindspot-gateway.onrender.com
+      - key: BLINDSPOT_ENVIRONMENT
+        value: production
+      - key: BLINDSPOT_CAPTURE
+        value: metadata        # opt in to inputs/full only after explicit data approval
+      - key: BLINDSPOT_ROUTING
+        value: observe_only    # Blindspot observes; it cannot change GSTPilot's model
       - key: NODE_VERSION
         value: "22"
