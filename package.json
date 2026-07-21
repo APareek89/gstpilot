@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
+    "@blindspot/sdk": "link:../Projects/Blindspot_v1/packages/sdk",
     "@huggingface/transformers": "^4.2.0",
     "@supabase/supabase-js": "^2.110.0",
     "dotenv": "^17.4.2",

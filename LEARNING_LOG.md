@@ -1,5 +1,25 @@
 # GSTPilot — Learning Log
 
+## Session 9 — 2026-07-21 (Blindspot observe-only connection)
+
+**What we built:** connected gstpilot to the local Blindspot prototype without changing its Claude
+routing. The existing `recordGeneration` helper now sends the same model, timing and token evidence to
+Langfuse and Blindspot; a turn-level `pipeline` span marks the workflow completed and flushes children at
+the answer boundary. Three live questions discovered `intake`, registration/late-fee slot filling, and
+the Sonnet guidance lane. Capture stayed `metadata`, so no question or answer content was retained.
+
+**3 key concepts:** (1) environment variables configure telemetry but cannot emit it—the application
+must call the SDK around real work; (2) linked local packages cross build-tool boundaries, so Turbopack's
+root must include both sibling projects and `node_modules` must contain the actual link; (3) child model
+spans are not the workflow lifecycle—a root agent span plus an explicit terminal flush prevents completed
+requests from appearing permanently `running`.
+
+**Most likely to break later:** the SDK currently uses a local sibling link and a broad local Turbopack
+root; deployment needs a published/built package or workspace-safe distribution. On this machine the dev
+server also needs the existing `NODE_EXTRA_CA_CERTS` bundle or Supabase thread creation fails before the
+agent runs. The API route currently hides that insert error and dereferences `data!`; surface the database
+error before public beta.
+
 ## Session 8c — 2026-07-10 (Phase 8c: agent memory + lightweight sign-up — ask → CONFIRM)
 
 **Why this session:** the app re-met a stranger on every message. Every turn re-derived everything

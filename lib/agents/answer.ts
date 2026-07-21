@@ -150,7 +150,12 @@ async function generate(
   const toolOutputs: string[] = [];
   for (let round = 0; round < 4; round++) {
     const res = await recordGeneration(parent,
-      { name: round === 0 ? "sonnet-generation" : `sonnet-tool-round-${round}`, model: GENERATION_MODEL, input: messages },
+      {
+        name: round === 0 ? "sonnet-generation" : `sonnet-tool-round-${round}`,
+        model: GENERATION_MODEL,
+        input: messages,
+        requirements: { toolCalling: true, systemMessages: true },
+      },
       () => anthropic.messages.create({
         model: GENERATION_MODEL,
         max_tokens: 1200,

@@ -17,7 +17,7 @@ import { isFresh, detectStance, type PendingState } from "../memory/working";
 import { memoryContextBlock, type MemoryBundle } from "../memory/store";
 import { ABSTAIN_PHRASE } from "../gates/verify-citations";
 import { recomputeNumbers } from "../gates/g3-recompute";
-import { getLangfuse, recordGeneration } from "../observability/langfuse";
+import { beginBlindspotExecution, getLangfuse, recordGeneration } from "../observability/langfuse";
 
 const HAIKU = "claude-haiku-4-5-20251001";
 
@@ -69,6 +69,13 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
   // sonnet generation, gates, reply) nest UNDER this trace as generation nodes — no more a second
   // stray "answer" trace per turn.
   const trace = lf.trace({ name: "pipeline", input: question, sessionId: opts.threadId, userId: opts.userId });
+  const blindspotExecution = beginBlindspotExecution(trace.id, question, opts.threadId);
+  // Every successful exit goes through one boundary: end the agent root, mark the execution
+  // completed, and flush its model nodes before returning the answer to the API route.
+  const complete = async (result: PipelineResult): Promise<PipelineResult> => {
+    await blindspotExecution.complete(result.reply);
+    return result;
+  };
   const trajectory: TrajectoryStep[] = [];
   let n = 0;
   const log = (name: string, ok: boolean, t0: number, note?: string) => {
@@ -95,7 +102,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     log("intake", false, t0, "service unavailable");
     trace.update({ output: reply, metadata: { service_error: true } });
     await lf.flushAsync().catch(() => {});
-    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory };
+    return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory });
   }
   log("intake", true, t0, `${intake.intent}/${intake.tier}`);
   log("G1-schema", g1_retries < 2, t0, g1_retries ? `retries=${g1_retries}` : undefined);
@@ -107,7 +114,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     log("ca-handoff", true, t0);
     trace.update({ output: reply, metadata: { escalated: true } });
     await lf.flushAsync().catch(() => {});
-    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: true, abstained: false, trajectory };
+    return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: true, abstained: false, trajectory });
   }
 
   // ROUTER: intake now also picks a LANE (the question's TYPE). T3 already short-circuited.
@@ -150,7 +157,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
       .trim();
     trace.update({ output: reply, metadata: { lane, mode: outcome.mode } });
     await lf.flushAsync().catch(() => {});
-    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: outcome.abstained, trajectory, pending: outcome.pending };
+    return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: outcome.abstained, trajectory, pending: outcome.pending });
   }
 
   // 2+3. retrieval + resolution (answerQuestion = hybridSearch + grounded generation + G4).
@@ -171,7 +178,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     log("clarify", true, t0, "needs_clarification");
     trace.update({ output: reply, metadata: { needs_clarification: true } });
     await lf.flushAsync().catch(() => {});
-    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory };
+    return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: false, trajectory });
   }
 
   // G2: relevance floor — if even the BEST chunk is weakly related, generation ran on sand.
@@ -182,7 +189,7 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     const reply = `${ABSTAIN_PHRASE.charAt(0).toUpperCase() + ABSTAIN_PHRASE.slice(1)} — mere paas is topic pe koi seedha source nahi mila. Aap chahen to CA se confirm kar sakte hain.`;
     trace.update({ output: reply, metadata: { g2_blocked: true } });
     await lf.flushAsync().catch(() => {});
-    return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: true, trajectory };
+    return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: true, trajectory });
   }
   log("resolution", !res.abstained, t0, res.regenerated ? "G4 regen used" : undefined);
   log("G4-citations", res.gate?.ok ?? false, t0);
@@ -241,5 +248,5 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
 
   trace.update({ output: reply, metadata: { tier: intake.tier, abstained: abstainedNow } });
   await lf.flushAsync().catch(() => {});
-  return { reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: abstainedNow, trajectory };
+  return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: false, abstained: abstainedNow, trajectory });
 }

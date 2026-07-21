@@ -2,6 +2,7 @@
 // One factory so credentials are read in exactly one place. All Langfuse writes are
 // best-effort: observability failing must never break the thing it observes.
 
+import { Blindspot, type NodeRequirements } from "@blindspot/sdk";
 import { Langfuse } from "langfuse";
 
 // Store the client on globalThis, NOT a plain module variable. In Next.js dev, editing any file
@@ -9,7 +10,10 @@ import { Langfuse } from "langfuse";
 // events (the trace gets an id and is returned to the UI, but its flush never lands → "Trace not
 // found" in Langfuse). Pinning it to globalThis means every hot-reloaded copy of this module shares
 // ONE client, so create-trace and flush always hit the same queue.
-const g = globalThis as unknown as { __gstpilot_lf?: Langfuse };
+const g = globalThis as unknown as {
+  __gstpilot_lf?: Langfuse;
+  __gstpilot_blindspot?: Blindspot;
+};
 
 // A "parent" is anything a child observation can hang under: the turn's trace, or a span inside
 // it. We derive the types from the SDK (no reliance on named exports) so a generation nests under
@@ -25,13 +29,37 @@ export type LfParent = LfTrace | LfSpan;
 // (haiku classifier, sonnet generation, …) uses the same one helper.
 export async function recordGeneration<T>(
   parent: LfParent | undefined,
-  meta: { name: string; model: string; input: unknown },
+  meta: { name: string; model: string; input: unknown; requirements?: NodeRequirements },
   fn: () => Promise<T>,
   extract?: (r: T) => { output?: unknown; inputTokens?: number; outputTokens?: number }
 ): Promise<T> {
   const gen = parent?.generation({ name: meta.name, model: meta.model, input: meta.input });
   try {
-    const r = await fn();
+    // Keep Langfuse as gstpilot's detailed trace while also sending the same generation timing,
+    // model and token counts to Blindspot. The operation is invoked exactly once; Blindspot is
+    // best-effort and its SDK never changes which provider or model gstpilot calls.
+    const r = parent
+      ? await getBlindspot().observeGeneration(
+          {
+            executionId: parent.traceId,
+            // Blindspot currently records the turn-level pipeline root, so every model call hangs
+            // from that stable root. Preserve the richer Langfuse parent separately as metadata.
+            parentId: parent.traceId,
+            node: meta.name,
+            provider: "anthropic",
+            model: meta.model,
+            input: meta.input,
+            requirements: {
+              inputModalities: ["text"],
+              outputModalities: ["text"],
+              ...meta.requirements,
+            },
+            metadata: { langfuseTraceId: parent.traceId, langfuseParentId: parent.id },
+          },
+          fn,
+          extract,
+        )
+      : await fn();
     const e = extract?.(r);
     gen?.end({
       output: e?.output,
@@ -44,6 +72,58 @@ export async function recordGeneration<T>(
     gen?.end({ level: "ERROR", statusMessage: (err as Error).message });
     throw err;
   }
+}
+
+// One process-wide Blindspot client survives Next.js development hot reloads, just like the
+// Langfuse client above. Environment variables decide whether telemetry is enabled and whether
+// only metadata, inputs, or full input/output content may leave gstpilot.
+export function getBlindspot(): Blindspot {
+  g.__gstpilot_blindspot ??= Blindspot.fromEnv({
+    workflow: "gstpilot",
+    framework: "custom-nextjs-agent",
+    language: "typescript",
+    onError: (error) => console.warn(`[blindspot] ${error.message}`),
+  });
+  return g.__gstpilot_blindspot;
+}
+
+// Start the turn-level agent span before gstpilot calls any model. Completing it marks the whole
+// Blindspot execution terminal and flushes queued child generations, so a finished user request
+// cannot remain misleadingly "running" merely because telemetry was still buffered.
+export function beginBlindspotExecution(
+  executionId: string,
+  input: unknown,
+  sessionId?: string,
+) {
+  const client = getBlindspot();
+  const root = client.span({
+    id: executionId,
+    executionId,
+    sessionId,
+    node: "pipeline",
+    kind: "agent",
+    input,
+    metadata: { langfuseTraceId: executionId },
+  });
+  let ended = false;
+
+  return {
+    // Idempotence protects future callers from accidentally ending the same execution twice.
+    complete(output: unknown) {
+      if (ended) return;
+      ended = true;
+      const endedAt = new Date();
+      root.end({
+        status: "ok",
+        output,
+        executionStatus: "completed",
+        executionEndedAt: endedAt,
+      });
+      // Delivery continues in the background: an observability outage must never add the SDK's
+      // retry/timeout window to the GST answer the user is waiting for.
+      void client.flush();
+    },
+  };
 }
 
 export function getLangfuse(): Langfuse {
