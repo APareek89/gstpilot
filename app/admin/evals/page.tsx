@@ -2,17 +2,12 @@
 // metrics side by side so improvement (or regression) across runs is visible at a glance.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { listEvalRuns } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function EvalsPage() {
-  const supabase = getServiceClient();
-  const { data: runs } = await supabase
-    .from(`${TABLE_PREFIX}eval_runs`)
-    .select("id, created_at, sut, cases, report")
-    .order("created_at", { ascending: false })
-    .limit(30);
+  const runs = await listEvalRuns();
 
   return (
     <main className="p-8 font-sans max-w-5xl mx-auto">

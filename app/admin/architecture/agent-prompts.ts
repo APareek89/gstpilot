@@ -7,7 +7,7 @@
 
 export type AgentPrompt = {
   name: string;
-  model: "Haiku" | "Sonnet";
+  model: "Configured small model" | "Configured main model";
   file: string;
   stage: string;      // where in the master flow it runs
   purpose: string;    // one line
@@ -17,7 +17,7 @@ export type AgentPrompt = {
 export const AGENT_PROMPTS: AgentPrompt[] = [
   {
     name: "intake (classify)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/agents/intake.ts",
     stage: "1 · Intake (first step)",
     purpose: "label the question → intent, tier (risk), lane (type)",
@@ -39,7 +39,7 @@ Question: {question}`,
   },
   {
     name: "transform query",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/retrieval/transform.ts",
     stage: "RAG path · before retrieval",
     purpose: "make a question searchable: Hinglish→statute rewrite + a fake 'HyDE' answer to search with",
@@ -54,9 +54,9 @@ Question: {question}`,
   },
   {
     name: "fillSlots (extract inputs)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/agents/clarify.ts",
-    stage: "Calculation lane · the ASK",
+    stage: "Calculation lane · the ASK; separate historical filing extraction",
     purpose: "extract a calculator's inputs from the conversation (dates, amounts, yes/no) — the model EXTRACTS, code validates",
     prompt: `You are filling the inputs for a tool that will {tool.purpose}. Read the conversation and extract ONLY values the user actually stated. If a value was not given at all, use null — NEVER invent a date, amount or choice the user never referred to.
 
@@ -74,7 +74,7 @@ Conversation:
   },
   {
     name: "extract arithmetic",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/agents/lanes/calculation.ts",
     stage: "Calculation lane · no-tool-fits branch",
     purpose: "read one math operation from a plain question (the model EXTRACTS op+values; generalArithmetic does the math)",
@@ -84,7 +84,7 @@ Question: {question}`,
   },
   {
     name: "resolveItem (rate)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/rates/lookup.ts",
     stage: "Rate lane · when synonyms miss",
     purpose: "pick which table item the question is about — from a CLOSED list (can't invent an item)",
@@ -97,7 +97,7 @@ Question: {question}`,
   },
   {
     name: "resolveConditionSide (rate)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/rates/lookup.ts",
     stage: "Rate lane · price-conditional items",
     purpose: "read whether the product's per-unit price is below/above the threshold — a QUANTITY is not a price",
@@ -107,7 +107,7 @@ Question: {question}`,
   },
   {
     name: "generate (grounded answer)",
-    model: "Sonnet",
+    model: "Configured main model",
     file: "lib/agents/answer.ts",
     stage: "RAG path · write the cited answer",
     purpose: "write a strictly-cited answer from the retrieved law chunks (can call calculator tools mid-answer)",
@@ -126,7 +126,7 @@ For any late-fee/interest AMOUNT, call the calculator tool — never compute mon
   },
   {
     name: "reply synthesis",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/agents/pipeline.ts",
     stage: "After the gates · tone",
     purpose: "rewrite the approved resolution into a warm reply — keeps every tag + number exactly",
@@ -138,7 +138,7 @@ Approved resolution:
   },
   {
     name: "G5 claim-check (verify)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/agents/pipeline.ts",
     stage: "Last gate · before shipping",
     purpose: "verify the rewrite added NO new claim vs the approved draft (a checker, not a generator)",
@@ -152,7 +152,7 @@ REPLY:
   },
   {
     name: "compaction (memory)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "app/api/ask/route.ts",
     stage: "After reply · thread memory",
     purpose: "fold old turns into a <150-word factual summary once a thread outgrows the 20-turn window",
@@ -162,7 +162,7 @@ REPLY:
   },
   {
     name: "guidance (practical help)",
-    model: "Sonnet",
+    model: "Configured main model",
     file: "lib/agents/lanes/guidance.ts",
     stage: "Guidance lane · drafting/wording questions",
     purpose: "answer practical drafting help (sample descriptions, formats) directly — HARD-barred from rates/amounts/dates/section numbers (G6 regex strips any that slip); code appends the disclaimer",
@@ -181,7 +181,7 @@ Question: {question}`,
   },
   {
     name: "memory extract (durable facts)",
-    model: "Haiku",
+    model: "Configured small model",
     file: "lib/memory/extract.ts",
     stage: "After reply · durable memory (Phase 8c, fire-and-forget)",
     purpose: "pull DURABLE business facts from the turn into user_memory — closed key set, code validates keys, confidence starts LOW (0.4); only the user's confirmation raises it",

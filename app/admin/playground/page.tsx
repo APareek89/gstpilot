@@ -1,3 +1,4 @@
+"use client";
 // Retrieval Playground — the debugging window into search. Type any question and see THREE
 // columns side by side: what meaning-search returned, what keyword-search returned, and the
 // fused final ranking the agents will actually consume. Seeing the channels separately is
@@ -7,9 +8,10 @@
 // fine and generation ignored it (agent problem). One glance here tells you which.
 
 import Link from "next/link";
-import { hybridSearch, type ChannelHit, type FusedHit } from "@/lib/retrieval/search";
+import type { ChannelHit, FusedHit } from "@/lib/retrieval/search";
+import { useEffect, useState } from "react";
+import { useRequests } from "@/components/AccountShell";
 
-export const dynamic = "force-dynamic";
 
 function ChunkLink({ id }: { id: string }) {
   return (
@@ -19,29 +21,18 @@ function ChunkLink({ id }: { id: string }) {
   );
 }
 
-export default async function PlaygroundPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>;
-}) {
-  const { q } = await searchParams;
-
-  let dense: ChannelHit[] = [];
-  let keyword: ChannelHit[] = [];
-  let fused: FusedHit[] = [];
-  let traceId: string | null = null;
-  let transformation: { original: string; rewritten: string; direct_ids: string[] } | null = null;
-  let error: string | null = null;
-
-  if (q) {
-    try {
-      // One shared entry point for ALL retrieval — this call also records the trace row
-      // that shows up in /admin/traces.
-      const result = await hybridSearch(q, "playground");
-      ({ dense, keyword, fused, traceId, transformation } = result);
-    } catch (e) {
-      error = (e as Error).message;
-    }
+export default function PlaygroundPage() {
+  const requests = useRequests();
+  const [q, setQ] = useState(''); const [busy, setBusy] = useState(false); const [searched, setSearched] = useState(false);
+  const [dense, setDense] = useState<ChannelHit[]>([]); const [keyword, setKeyword] = useState<ChannelHit[]>([]); const [fused, setFused] = useState<FusedHit[]>([]);
+  const [traceId, setTraceId] = useState<string | null>(null); const [transformation, setTransformation] = useState<{ original: string; rewritten: string; direct_ids: string[] } | null>(null); const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setQ(new URLSearchParams(window.location.search).get('q') ?? ''); }, []);
+  async function search(event: React.FormEvent) {
+    event.preventDefault(); if (!q.trim() || busy) return; const ticket = requests.capture(); setBusy(true); setError(null); setSearched(false);
+    try { const result = await requests.request<{dense:ChannelHit[]; keyword:ChannelHit[]; fused:FusedHit[]; traceId:string|null; transformation:typeof transformation}>('/api/retrieval', 'POST', {query:q.trim()});
+      if (result) { setDense(result.dense); setKeyword(result.keyword); setFused(result.fused); setTraceId(result.traceId); setTransformation(result.transformation); setSearched(true); }
+    } catch (e) { if (requests.current(ticket)) setError(e instanceof Error ? e.message : 'Search was not completed.'); }
+    finally { if (requests.current(ticket)) setBusy(false); }
   }
 
   return (
@@ -51,15 +42,16 @@ export default async function PlaygroundPage({
         dense = meaning · keyword = exact words · fused = what the agents will see
       </p>
 
-      <form method="GET" className="flex gap-2 mb-6">
+      <form onSubmit={search} className="flex gap-2 mb-6">
         <input
-          name="q" defaultValue={q ?? ""} autoFocus
+          name="q" aria-label="Retrieval query" value={q} onChange={e => setQ(e.target.value)} maxLength={8000} autoFocus
           placeholder="footwear ka GST rate kya hai…"
           className="border rounded px-3 py-2 text-sm flex-1"
         />
-        <button className="border rounded px-4 py-2 text-sm bg-gray-50 hover:bg-gray-100">search</button>
+        <button disabled={busy || !q.trim()} className="btn primary">{busy ? "Searching…" : "Search"}</button>
       </form>
 
+      <p className="text-xs text-gray-500 mb-4">Search uses the configured provider when you submit. Source coverage is limited and dated.</p>
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
       {transformation && transformation.rewritten !== transformation.original && (
         <p className="text-xs mb-1 text-gray-600">
@@ -73,7 +65,7 @@ export default async function PlaygroundPage({
         </p>
       )}
 
-      {q && !error && (
+      {searched && !error && (
         <div className="grid grid-cols-3 gap-4 text-sm">
           <section>
             <h2 className="font-semibold mb-2">dense (top 20)</h2>

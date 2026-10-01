@@ -17,7 +17,7 @@
 //    - needs_clarification: flagged when the question is too ambiguous to answer safely.
 //    Falls back to the original query on any failure — degraded, never blocked.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { recordGeneration, type LfParent } from "../observability/langfuse";
 
 export type Transformation = {

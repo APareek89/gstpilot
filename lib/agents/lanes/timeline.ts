@@ -7,7 +7,7 @@
 // helpful. Each line is tagged to a real chunk id, so the timeline is verifiable.
 
 import { hybridSearch } from "../../retrieval/search";
-import { getServiceClient, TABLE_PREFIX } from "../../supabase";
+import {chunksById} from "../../repositories/corpus";
 import { resolveItem } from "../../rates/lookup";
 import type { LaneOutcome } from "../lanes";
 import type { LfParent } from "../../observability/langfuse";
@@ -42,10 +42,7 @@ export async function runTimelineLane(question: string, context?: string, _inten
   // Fetch the release date + source of each retrieved chunk; keep only dated notifications/
   // circulars, de-duplicated to one row per source document (a notification split across pages
   // must count once), then order oldest→newest.
-  const s = getServiceClient();
-  const { data } = ids.length
-    ? await s.from(`${TABLE_PREFIX}legal_chunks`).select("id, act, source_doc_id, effective_date, heading_path").in("id", ids)
-    : { data: [] as any[] };
+  const data = await chunksById(ids);
   const byDoc = new Map<string, { id: string; date: string; heading: string }>();
   for (const r of data ?? []) {
     if (!["NOTIF-CT", "NOTIF-CTR", "CIRCULAR"].includes(r.act as string)) continue;

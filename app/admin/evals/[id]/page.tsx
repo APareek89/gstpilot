@@ -4,7 +4,7 @@
 // debugging loop is: see the miss here → replay it there → read both channels.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { getEvalRun } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,7 @@ export default async function EvalDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = getServiceClient();
-  const { data: run } = await supabase
-    .from(`${TABLE_PREFIX}eval_runs`)
-    .select("*")
-    .eq("id", id)
-    .single();
+  const run = await getEvalRun(id);
 
   if (!run) return <main className="p-8">Run not found.</main>;
   const rep = run.report as any;

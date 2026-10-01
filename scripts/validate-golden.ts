@@ -26,7 +26,7 @@ async function main() {
     .from(`${TABLE_PREFIX}legal_chunks`)
     .select("id, status")
     .in("id", allChunkIds);
-  const found = new Map((data ?? []).map((r) => [r.id, r.status]));
+  const found = new Map((data ?? []).map((r: { id: string; status: string }) => [r.id, r.status]));
   for (const c of cases) {
     for (const id of c.relevant_chunk_ids) {
       if (!found.has(id)) problems.push(`${c.id}: chunk '${id}' does not exist`);

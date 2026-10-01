@@ -1,5 +1,23 @@
 # GSTPilot — Learning Log
 
+## Portfolio launch — 1 October 2026 (live acceptance verified)
+
+**Design calls.** Preserve the question/clarification/citation and confirmed-memory loop, but derive identity from a real account. Add an explicit historical filing action beside chat. A prepared example shares calculator and persistence behavior while bypassing providers; ordinary pasted facts never inherit that exemption. Reusing the full chat pipeline for the single filing action was rejected because intake, retrieval, synthesis and memory extraction would add hidden requests.
+
+**Three concepts.** (1) A successful fetch is not the end of an identity check: JSON body parsing and every streamed frame can finish after another account signs in. Capture an owner generation before the request and reject stale work throughout. (2) A browser may still think it is account A after another tab changes the cookie to B; an expected-owner request header lets the server reject this transition before returning B's data. (3) A deterministic formula can be correct for its inputs while the legal conclusion remains unsupported. Display supplied dates, reviewed historical scope and actual source links rather than claiming a current liability.
+
+**Verification.** Eleven client regressions, 18 PostgreSQL contracts, two provider/PostgreSQL contracts and 48 compiled Auth.js/API checks (58 assertions/57 requests) pass. TypeScript and the coherent build pass. Live two-account acceptance used 29 requests with zero providers; root browser checks of free and paid paths had no console errors. The original baseline and routing repair remain separate evidence.
+
+**One paid path.** On 1 October 2026, 09:55:20.640–09:55:22.974 UTC, one ordinary filing POST completed without retries. OpenAI `gpt-4o-mini` used 608 input and 78 output tokens, zero cached, at an estimated USD 0.000138. The model extracted supplied fields; deterministic code produced ₹300 and persisted it under the owner. Independent readback confirmed the saved reply and another owner's 404. This is a historical formula demonstration, not validation of current tax liability or a fully paid chat pipeline.
+
+**Release boundary.** Live image `ca026ef671cea06a8860712d53d82eb33593b3423778893c45103f884f128b45` came from logical Docker tag `portfolio/gstpilot:f8058a32493897f9`. Image identity is recorded at build, tested without network, checked before activation and retained in runtime configuration. This closes the risk that a second build silently activates bytes different from those tested.
+
+**Browser findings corrected.** Historical filing source IDs are not corpus chunk IDs. Workspace and admin conversations now share an allowlisted official-source link renderer; actual corpus references retain local detail links. A filing-mode T3 response has no calculation, so it must not display the historical calculation badge or disclosure.
+
+**Known documentation/tool limits.** Diagram 7 captures the launch path. MASTER renders successfully but retains older failure/memory/lane details without the hosted coverage gate. Legacy CLI scripts still carry service or laptop assumptions and some issue paid requests; they are not the certified hosted setup or corpus-write workflow.
+
+**Most likely to break later.** Extending source coverage without extending its date/period guards would turn a historical illustration into an unjustified current-law claim. Review official source coverage and preserve owner/prepared provenance before adding periods or calculator rules.
+
 ## Session 9 — 2026-07-21 (Blindspot observe-only connection)
 
 **What we built:** connected gstpilot to the local Blindspot prototype without changing its Claude

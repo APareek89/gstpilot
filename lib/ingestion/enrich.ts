@@ -10,7 +10,7 @@
 //   4. Failure is graceful: a wrong label slightly degrades retrieval ranking; it cannot
 //      change what the law says or what gets cited. (Compare: a wrong section number would.)
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { getServiceClient, TABLE_PREFIX } from "../supabase";
 
 // "clarification" was added after the closed set rejected it 500+ times for circulars —
@@ -75,7 +75,7 @@ export async function enrichChunks(): Promise<{ labeled: number; failed: number 
 
     for (let i = 0; i < data.length; i += CONCURRENCY) {
       const results = await Promise.allSettled(
-        data.slice(i, i + CONCURRENCY).map(async (row) => {
+        data.slice(i, i + CONCURRENCY).map(async (row: { id: string; text: string }) => {
           const labels = await labelOne(anthropic, row.id, row.text);
           const { error: upErr } = await supabase
             .from(`${TABLE_PREFIX}legal_chunks`)

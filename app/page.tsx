@@ -1,384 +1,85 @@
-// GSTPilot chat — the product face. A thread of questions and cited answers.
-// Citations render as expandable cards showing the EXACT legal text relied on: a quoted
-// snippet builds more trust than a bare link because the user verifies the claim in place,
-// without an act-of-faith click into a 200-page PDF. Every reply carries a risk-tier badge,
-// the information-not-advice line, and a CA button on T2/T3. Feedback: 👍 / 👎 + one reason —
-// and (Phase 8) every 👎 is the raw material of a new golden test case.
-
 "use client";
-
-import { useEffect, useRef, useState } from "react";
-
-type Citation = { id: string; heading: string; snippet: string };
-// The signed-in user, mirrored in localStorage("gstpilot_user"). Email is the whole identity
-// (learning build — no password; see /api/user for the ⚠️ magic-link human task). sells/state
-// are the ONLY two facts we ask upfront; everything else the agent learns from conversation.
-type User = { user_id: string; email: string; sells: string | null; state: string | null };
-type Msg = {
-  role: "user" | "assistant";
-  content: string;
-  tier?: string;
-  citations?: Citation[];
-  messageId?: string;
-  escalated?: boolean;
-  feedback?: "up" | "down";
-};
-
-// Hinglish narration for each pipeline step the SSE stream reports — so the wait feels like
-// the agent working through the law, not a spinner.
-const STEP_LABELS: Record<string, string> = {
-  intake: "samajh rahe hain…", "G1-schema": "risk check…", router: "sahi raasta chun rahe hain…",
-  "lane:calculation": "hisaab laga rahe hain…", "lane:rate_lookup": "rate table dekh rahe hain…",
-  "lane:change_over_time": "timeline bana rahe hain…", "lane:guidance": "practical tareeka bata rahe hain…",
-  clarify: "ek detail chahiye…",
-  retrieval: "kanoon dhoond rahe hain…",
-  "G2-retrieval-floor": "relevance check…", resolution: "jawab ban raha hai…",
-  "G4-citations": "citations verify…", "G3-recompute": "numbers verify…",
-  "reply-synthesis": "final touch…", "G5-claim-check": "final check…", "ca-handoff": "CA handoff…",
-};
-
-// One-tap starters that show the breadth (rate · e-commerce · refund · late fee · movement).
-const EXAMPLES = [
-  "footwear ka GST rate kya hai?",
-  "Amazon pe bechta hu, TCS kitna katega?",
-  "how do i get a GST refund?",
-  "GSTR-3B late file karne pe late fee?",
-  "e-way bill kab zaroori hota hai?",
-];
-
-// Tier → plain-language meaning + accent. Colour carries the risk: calm teal, caution amber,
-// escalate rust.
-const TIER: Record<string, { label: string; cls: string }> = {
-  T1: { label: "general info", cls: "bg-brand-soft text-brand-ink" },
-  T2: { label: "your money / deadline", cls: "bg-amber-soft text-amber" },
-  T3: { label: "escalated to a CA", cls: "bg-rust-soft text-rust" },
-};
-
+// The original question, citation, clarification and feedback loop stays on this page.
+// A separate filing action exposes the existing calculator with dated source coverage.
+// Only the server can create a permanently free prepared example; editable facts use the ordinary route.
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowUp, Calculator, ChevronDown, FileText, History, MessageSquare, Plus, Sparkles, ThumbsUp, TriangleAlert } from 'lucide-react';
+import { useRequests } from '@/components/AccountShell';
+import { CitationLink } from '@/components/CitationLink';
+import { hasHistoricalCalculation, type Citation } from '@/lib/client/citations';
+type Profile = { user_id: string; email: string; sells: string | null; state: string | null };
+type Analysis = { inputs?: Record<string, unknown>; calculation?: Record<string, unknown>; coverage?: { label?: string; historical?: boolean; [key: string]: unknown } };
+type Msg = { id?: string; role: 'user' | 'assistant'; content: string; tier?: string; citations?: Citation[]; messageId?: string; escalated?: boolean; feedback?: 'up' | 'down'; prepared?: boolean; kind?: string; analysis?: Analysis };
+type Thread = { id: string; title: string; kind: 'chat' | 'filing'; prepared: boolean };
+const STEPS: Record<string, string> = { intake: 'Understanding your question…', 'G1-schema': 'Checking risk…', router: 'Choosing the next step…', 'lane:calculation': 'Checking the calculation…', 'lane:rate_lookup': 'Checking available rate sources…', 'lane:change_over_time': 'Reading the timeline…', 'lane:guidance': 'Preparing guidance…', clarify: 'Checking missing details…', retrieval: 'Finding sources…', 'G2-retrieval-floor': 'Checking relevance…', resolution: 'Preparing the answer…', 'G4-citations': 'Checking citations…', 'G3-recompute': 'Verifying the numbers…', 'reply-synthesis': 'Preparing the reply…', 'G5-claim-check': 'Checking supported claims…', 'ca-handoff': 'Preparing a professional handoff…' };
+const EXAMPLES = ['footwear ka GST rate kya hai?', 'Amazon pe bechta hu, TCS kitna katega?', 'how do i get a GST refund?', 'GSTR-3B late file karne pe late fee?', 'e-way bill kab zaroori hota hai?'];
+const TIERS: Record<string, string> = { T1: 'General information', T2: 'Money or deadline', T3: 'Consult a Chartered Accountant' };
+const fieldLabels: Record<string, string> = { return_type: 'Return', period: 'Period', tax_period: 'Period', due_date: 'Supplied due date', filing_date: 'Filed on', nil_return: 'Nil return', annual_turnover_inr: 'Annual turnover (INR)', days_late: 'Days late', fee_per_day: 'Daily amount (INR)', computed_fee: 'Calculated amount (INR)', cap_applied: 'Cap applied (INR)', payable: 'Illustrative total (INR)' };
 export default function ChatPage() {
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("");
-  // null = checking localStorage; false = not signed in (show the gate); User = signed in.
-  const [user, setUser] = useState<User | null | false>(null);
-  const threadRef = useRef<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-
-  // Recognise a returning user from localStorage — this is what makes session 2 "warm".
+  const requests = useRequests();
+  const [profile, setProfile] = useState<Profile | null>(null); const [profileLoaded, setProfileLoaded] = useState(false);
+  const [threads, setThreads] = useState<Thread[]>([]); const [msgs, setMsgs] = useState<Msg[]>([]); const [input, setInput] = useState('');
+  const [mode, setMode] = useState<'chat' | 'filing'>('chat'); const [prepared, setPrepared] = useState(false); const [busy, setBusy] = useState(false); const [restoring, setRestoring] = useState(true); const [status, setStatus] = useState(''); const [error, setError] = useState('');
+  const thread = useRef<string | null>(null); const end = useRef<HTMLDivElement>(null); const selection = useRef(0);
+  async function refreshHistory() { const result = await requests.request<{ threads: Thread[] }>('/api/threads'); if (result) { setThreads(result.threads); return result.threads; } return []; }
+  async function openThread(id: string) {
+    const serial = ++selection.current; const ticket = requests.capture(); setRestoring(true); setError('');
+    try { const result = await requests.request<{ thread: Thread; messages: Msg[] }>(`/api/threads/${encodeURIComponent(id)}`);
+      if (!result || !requests.current(ticket) || serial !== selection.current) return;
+      thread.current = result.thread.id; setMsgs(result.messages.map(m => ({ ...m, messageId: m.messageId ?? m.id }))); setMode(result.thread.kind === 'filing' ? 'filing' : 'chat'); setPrepared(!!result.thread.prepared); setInput(''); window.history.replaceState(null, '', `/?thread=${encodeURIComponent(id)}`);
+    } catch { if (requests.current(ticket) && serial === selection.current) setError('This conversation could not be opened. Please choose another or retry.'); }
+    finally { if (requests.current(ticket) && serial === selection.current) setRestoring(false); }
+  }
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("gstpilot_user");
-      setUser(raw ? (JSON.parse(raw) as User) : false);
-    } catch { setUser(false); }
+    const ticket = requests.capture();
+    void (async () => { try {
+      const [p, list] = await Promise.all([requests.request<Profile>('/api/user'), refreshHistory()]); if (!requests.current(ticket)) return;
+      if (p) setProfile(p); setProfileLoaded(true);
+      const selected = new URLSearchParams(window.location.search).get('thread') ?? list[0]?.id;
+      if (selected) await openThread(selected); else setRestoring(false);
+    } catch { if (requests.current(ticket)) { setError('The workspace could not be loaded. Reload to retry.'); setRestoring(false); } } })();
   }, []);
-
-  function saveUser(u: User) {
-    localStorage.setItem("gstpilot_user", JSON.stringify(u));
-    setUser(u);
-  }
-
-  // keep the newest turn in view as the thread grows / status ticks
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, status]);
-
-  // ask() drives one question→answer turn over the SSE stream. Accepts an override so the
-  // example chips can submit directly (React state updates are async — reading `input` after
-  // setInput would race).
-  async function ask(override?: string) {
-    const q = (override ?? input).trim();
-    if (!q || busy) return;
-    setInput("");
-    setBusy(true);
-    setStatus("");
-    setMsgs((m) => [...m, { role: "user", content: q }]);
-
+  useEffect(() => { if (busy) end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, [msgs, status, busy]);
+  function newThread(next: 'chat' | 'filing' = mode, text = '') { selection.current++; thread.current = null; setMsgs([]); setInput(text); setMode(next); setPrepared(false); setError(''); setRestoring(false); window.history.replaceState(null, '', '/'); }
+  async function submit(example = false, override?: string) {
+    const facts = (override ?? input).trim(); if (busy || restoring || (!example && (!facts || facts.length > 8000 || prepared))) return;
+    if (!example && new TextEncoder().encode(JSON.stringify({facts})).length > 15000) { setError('These facts are too long. Please shorten the text before submitting.'); return; }
+    const ticket = requests.capture(); setBusy(true); setError(''); setStatus(example ? 'Preparing the free example…' : 'Starting…');
+    if (!example) { setMsgs(current => [...current, { role: 'user', content: facts }]); setInput(''); }
+    else { selection.current++; thread.current = null; setMsgs([]); setMode('filing'); setPrepared(true); }
     try {
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, threadId: threadRef.current, userId: user ? user.user_id : undefined }),
-      });
-      const reader = res.body!.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        for (const line of buf.split("\n\n")) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const ev = JSON.parse(line.slice(6));
-            if (ev.type === "thread") threadRef.current = ev.threadId;
-            if (ev.type === "status") setStatus(STEP_LABELS[ev.name] ?? ev.name);
-            if (ev.type === "answer")
-              setMsgs((m) => [...m, { role: "assistant", content: ev.reply, tier: ev.tier, citations: ev.citations, messageId: ev.messageId, escalated: ev.escalated }]);
-            if (ev.type === "error")
-              setMsgs((m) => [...m, { role: "assistant", content: "Kuch galat ho gaya — dobara try karein. (" + ev.message + ")" }]);
-          } catch { /* partial frame — wait for more bytes */ }
+      const url = example ? '/api/examples' : mode === 'filing' ? '/api/filing-analysis' : '/api/ask';
+      const body = example ? { id: 'historical-gstr3b' } : mode === 'filing' ? { facts, threadId: thread.current } : { question: facts, threadId: thread.current };
+      await requests.request(url, 'POST', body, event => {
+        if (event.type === 'thread' && typeof event.threadId === 'string') { thread.current = event.threadId; window.history.replaceState(null, '', `/?thread=${encodeURIComponent(event.threadId)}`); }
+        if (event.type === 'status') setStatus(STEPS[String(event.name)] ?? 'Working through the details…');
+        if (event.type === 'answer') {
+          const analysis = (event.analysis ?? { inputs: event.inputs, calculation: event.calculation, coverage: event.coverage }) as Analysis;
+          setMsgs(current => [...current, { role: 'assistant', content: String(event.reply ?? ''), tier: event.tier as string, citations: event.citations as Citation[], messageId: event.messageId as string, escalated: !!event.escalated, prepared: !!event.prepared || example, kind: String(event.kind ?? event.analysisKind ?? (example ? 'filing' : mode)), analysis }]);
+          if (event.prepared) setPrepared(true);
         }
-        buf = buf.slice(buf.lastIndexOf("\n\n") + 2);
-      }
-    } catch {
-      setMsgs((m) => [...m, { role: "assistant", content: "Network hiccup — dobara try karein." }]);
-    }
-    setStatus("");
-    setBusy(false);
-  }
-
-  async function sendFeedback(i: number, verdict: "up" | "down", reason?: string) {
-    const msg = msgs[i];
-    if (!msg.messageId) return;
-    setMsgs((m) => m.map((x, j) => (j === i ? { ...x, feedback: verdict } : x)));
-    await fetch("/api/feedback", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messageId: msg.messageId, verdict, reason }),
-    });
-  }
-
-  return (
-    <div className="min-h-screen flex flex-col bg-paper text-ink">
-      {/* header — serif wordmark for authority, quiet admin link */}
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/85 backdrop-blur">
-        <div className="max-w-3xl mx-auto px-5 h-14 flex items-center justify-between">
-          <div className="flex items-baseline gap-2.5">
-            <span className="font-serif text-[22px] leading-none font-semibold text-brand tracking-tight">GSTPilot</span>
-            <span className="hidden sm:inline text-xs text-muted">GST answers, with the law attached</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {user && (
-              <>
-                <span className="hidden sm:inline text-xs text-muted" title="Signed in (email-only, learning build)">{user.email}</span>
-                <a href="/memory" className="text-xs text-brand hover:underline" title="Jo GSTPilot ko aapke baare mein yaad hai — dekhein, sudhaarein, ya delete karein">Memory</a>
-              </>
-            )}
-            <a href="/admin/conversations" className="text-xs text-muted hover:text-ink transition-colors">Admin</a>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 w-full">
-        <div className="max-w-3xl mx-auto px-5 py-6">
-          {user === null ? null : user === false ? (
-            <SignInCard onSignedIn={saveUser} />
-          ) : !user.sells || !user.state ? (
-            <OnboardingCard user={user} onDone={saveUser} />
-          ) : msgs.length === 0 ? (
-            <EmptyState onPick={(q) => ask(q)} />
-          ) : (
-            <div className="space-y-5">
-              {msgs.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {m.role === "user" ? (
-                    <div className="max-w-[85%] rounded-2xl rounded-br-md bg-brand-soft px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
-                      {m.content}
-                    </div>
-                  ) : (
-                    <div className="max-w-[94%] w-full rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-                      {m.tier && (
-                        <span className={`inline-flex items-center text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded-full mb-2 ${TIER[m.tier]?.cls ?? "bg-line text-muted"}`}>
-                          {m.tier} · {TIER[m.tier]?.label ?? ""}{m.escalated ? " ↗" : ""}
-                        </span>
-                      )}
-                      <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink/90">{m.content}</div>
-
-                      {m.citations && m.citations.length > 0 && (
-                        <div className="mt-3.5 space-y-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted">Sources</p>
-                          {m.citations.map((c) => (
-                            <details key={c.id} className="group rounded-lg border border-line bg-paper/50 open:bg-surface transition-colors">
-                              <summary className="cursor-pointer list-none px-3 py-2 flex items-center gap-2">
-                                <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-brand-soft text-brand-ink">{c.id}</span>
-                                <span className="text-xs text-muted truncate">{c.heading}</span>
-                                <span className="ml-auto text-muted text-xs transition-transform group-open:rotate-90">›</span>
-                              </summary>
-                              <div className="px-3 pb-3">
-                                <blockquote className="border-l-2 border-brand/40 pl-3 text-[13px] leading-relaxed text-ink/75 italic">“{c.snippet}…”</blockquote>
-                                <a href={`/admin/chunks/${encodeURIComponent(c.id)}`} target="_blank" className="mt-2 inline-block text-xs text-brand hover:underline">Read the full section →</a>
-                              </div>
-                            </details>
-                          ))}
-                        </div>
-                      )}
-
-                      {(m.tier === "T2" || m.tier === "T3") && (
-                        <a href="mailto:?subject=GST%20question%20—%20CA%20consult" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber bg-amber-soft border border-amber/25 rounded-lg px-3 py-1.5 hover:bg-amber-soft/70 transition-colors">
-                          🧑‍💼 Talk to a CA
-                        </a>
-                      )}
-
-                      {m.messageId && (
-                        <div className="mt-3 pt-2.5 border-t border-line flex items-center gap-3 text-xs">
-                          {m.feedback ? (
-                            <span className="text-muted">{m.feedback === "up" ? "Thanks — glad it helped ✓" : "Thanks — noted, we’ll learn from it ✓"}</span>
-                          ) : (
-                            <>
-                              <span className="text-muted">Helpful?</span>
-                              <button onClick={() => sendFeedback(i, "up")} className="hover:scale-110 transition-transform" title="Yes">👍</button>
-                              <span className="text-line">·</span>
-                              <button onClick={() => sendFeedback(i, "down", "wrong")} className="text-muted hover:text-rust transition-colors">galat</button>
-                              <button onClick={() => sendFeedback(i, "down", "unclear")} className="text-muted hover:text-rust transition-colors">samajh nahi aaya</button>
-                              <button onClick={() => sendFeedback(i, "down", "didnt_answer")} className="text-muted hover:text-rust transition-colors">jawab nahi mila</button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {busy && (
-                <div className="flex items-center gap-2.5 text-sm text-muted pl-1">
-                  <span className="flex gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand/60 animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand/60 animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand/60 animate-bounce" />
-                  </span>
-                  <span>{status || "shuru kar rahe hain…"}</span>
-                </div>
-              )}
-              <div ref={endRef} />
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* composer — sticky, with the standing disclaimer beneath */}
-      <div className="sticky bottom-0 border-t border-line bg-paper/90 backdrop-blur">
-        <div className="max-w-3xl mx-auto px-5 py-3">
-          <form onSubmit={(e) => { e.preventDefault(); ask(); }} className="flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Apna GST sawaal likhein…"
-              className="flex-1 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition"
-            />
-            <button
-              disabled={busy || !input.trim() || !user || !user.sells || !user.state}
-              className="rounded-xl bg-brand text-white px-5 py-2.5 text-sm font-medium hover:bg-brand-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Poochho
-            </button>
-          </form>
-          <p className="mt-2 text-[11px] text-muted text-center">
-            Information, not professional advice. Notices, penalties &amp; disputes go to a Chartered Accountant.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// SignInCard — email-only entry. One field, no password: the email IS the identity in this
-// learning build. A returning email gets its old profile back (that's the whole point of
-// memory); a new one goes to the two-question onboarding.
-function SignInCard({ onSignedIn }: { onSignedIn: (u: User) => void }) {
-  const [email, setEmail] = useState("");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true); setErr("");
-    try {
-      const res = await fetch("/api/user", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        if (event.type === 'error') throw new Error(typeof event.message === 'string' ? event.message : 'Analysis was not completed. Please retry.');
       });
-      const j = await res.json();
-      if (!res.ok) { setErr(j.error ?? "Kuch galat ho gaya."); setBusy(false); return; }
-      onSignedIn(j as User);
-    } catch { setErr("Network hiccup — dobara try karein."); setBusy(false); }
+      if (requests.current(ticket)) { await refreshHistory(); if (example && thread.current) await openThread(thread.current); }
+    } catch (e) { if (requests.current(ticket)) setError(e instanceof Error ? e.message : 'The request was not completed. Please retry.'); }
+    finally { if (requests.current(ticket)) { setBusy(false); setStatus(''); } }
   }
-
-  return (
-    <div className="py-14 max-w-sm mx-auto text-center">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-brand text-white grid place-items-center font-serif text-xl shadow-sm">G</div>
-      <h2 className="mt-4 font-serif text-2xl text-ink">Apna email batayein</h2>
-      <p className="mt-2 text-sm text-muted leading-relaxed">
-        GSTPilot aapko yaad rakhega — dobara aane pe wahi sawaal phir se nahi poochhega.
-      </p>
-      <form onSubmit={submit} className="mt-6 flex gap-2">
-        <input
-          type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="aap@business.com"
-          className="flex-1 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition"
-        />
-        <button disabled={busy || !email.trim()} className="rounded-xl bg-brand text-white px-5 py-2.5 text-sm font-medium hover:bg-brand-ink disabled:opacity-40 transition-colors">
-          Chalo
-        </button>
-      </form>
-      {err && <p className="mt-2 text-xs text-rust">{err}</p>}
-      <p className="mt-4 text-[11px] text-muted">Email hi login hai — koi password nahi. (Learning build: real sign-in aayega.)</p>
-    </div>
-  );
-}
-
-// OnboardingCard — exactly TWO questions, then never again: what do you sell, which state.
-// Everything else (platforms, turnover band, filing habits) the agent LEARNS from conversation
-// — asking a long form upfront is exactly the cold-stranger experience memory exists to kill.
-function OnboardingCard({ user, onDone }: { user: User; onDone: (u: User) => void }) {
-  const [sells, setSells] = useState(user.sells ?? "");
-  const [state, setState] = useState(user.state ?? "");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const res = await fetch("/api/user", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.user_id, sells, state }),
-      });
-      const j = await res.json();
-      if (res.ok) onDone(j as User);
-    } finally { setBusy(false); }
+  async function feedback(index: number, verdict: 'up' | 'down', reason?: string) {
+    const message = msgs[index]; if (!message.messageId) return; const ticket = requests.capture(); setError('');
+    try { await requests.request('/api/feedback', 'POST', { messageId: message.messageId, verdict, reason }); if (requests.current(ticket)) setMsgs(old => old.map((m, i) => m.messageId === message.messageId ? { ...m, feedback: verdict } : m)); }
+    catch { if (requests.current(ticket)) setError('Feedback was not saved. Please retry.'); }
   }
-
-  return (
-    <div className="py-14 max-w-sm mx-auto text-center">
-      <h2 className="font-serif text-2xl text-ink">Do chhote sawaal</h2>
-      <p className="mt-2 text-sm text-muted leading-relaxed">Bas itna — baaki main baat-cheet se seekh lunga.</p>
-      <form onSubmit={submit} className="mt-6 space-y-3 text-left">
-        <label className="block">
-          <span className="text-xs text-muted">Aap kya bechte hain?</span>
-          <input value={sells} onChange={(e) => setSells(e.target.value)} placeholder="e.g. footwear, sarees, electronics"
-            className="mt-1 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition" />
-        </label>
-        <label className="block">
-          <span className="text-xs text-muted">Kaunse state mein hain?</span>
-          <input value={state} onChange={(e) => setState(e.target.value)} placeholder="e.g. Maharashtra"
-            className="mt-1 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition" />
-        </label>
-        <button disabled={busy || !sells.trim() || !state.trim()} className="w-full rounded-xl bg-brand text-white px-5 py-2.5 text-sm font-medium hover:bg-brand-ink disabled:opacity-40 transition-colors">
-          Shuru karein
-        </button>
-      </form>
-    </div>
-  );
+  const needsProfile = !profile?.sells || !profile?.state;
+  return <main className="chat-shell"><aside className="history-panel"><div className="row spread"><h2><History size={16} />Conversations</h2><button className="btn icon" disabled={busy || restoring} aria-label="New conversation" onClick={() => newThread()}><Plus size={17} /></button></div><nav className="thread-list" aria-label="Your conversations">{threads.map(t => <button key={t.id} className={`thread ${thread.current === t.id ? 'active' : ''}`} disabled={busy} onClick={() => void openThread(t.id)}><span>{t.title || 'Untitled conversation'}</span>{t.prepared && <small>Prepared · Free</small>}</button>)}{!threads.length && <p className="muted small">Your saved conversations appear here.</p>}</nav><div className="sidebar-links"><Link href="/memory">Business memory</Link><Link href="/admin/conversations">Evidence &amp; sources</Link></div></aside>
+    <section className="chat-main"><div className="workspace-toolbar"><div className="segmented" aria-label="Analysis mode"><button className={mode === 'chat' ? 'selected' : ''} disabled={busy || restoring} onClick={() => newThread('chat')}><MessageSquare size={15} />Chat</button><button className={mode === 'filing' ? 'selected' : ''} disabled={busy || restoring} onClick={() => newThread('filing')}><Calculator size={15} />Filing analysis</button></div><button className="btn" disabled={busy || restoring} onClick={() => void submit(true)} aria-busy={busy && prepared}><Sparkles size={15} />Try with an example <span className="badge">Free</span></button></div>
+    <div className="conversation"><div className="coverage-note"><FileText size={17} /><span>Limited, dated source coverage. Check current rules with your Chartered Accountant.</span></div>
+      {error && <div className="alert danger" role="alert">{error}</div>}
+      {restoring ? <p role="status" className="muted">Opening your workspace…</p> : mode === 'chat' && profileLoaded && needsProfile && !msgs.length ? <Onboarding profile={profile} onDone={setProfile} /> : !msgs.length ? <div className="empty-state"><h1>{mode === 'filing' ? 'Check the facts behind a filing.' : 'GST questions, with sources.'}</h1><p>{mode === 'filing' ? 'Paste your filing facts to explore a January 2022 GSTR-3B late-fee illustration. Dates come from you; the tool does not establish your due date or submit a return.' : 'Ask in English or Hinglish. Inspect citations, clarify missing details and review what is remembered.'}</p>{mode === 'chat' && <div className="starter-list">{EXAMPLES.map(q => <button key={q} className="btn" onClick={() => setInput(q)}>{q}</button>)}</div>}<p className="muted small">Try the prepared historical example without a provider call.</p></div> : <div className="messages">{prepared && <div className="alert"><span className="badge">Prepared · Free</span> Historical illustration. Fixed example facts; no model request.<button className="text-link" disabled={busy} onClick={() => newThread('filing', msgs.find(m => m.role === 'user')?.content ?? '')}>Analyze your own facts</button></div>}{msgs.map((message, index) => <article key={message.id ?? `${index}-${message.role}`} className={`message ${message.role}`}><div className="row wrap">{message.role === 'assistant' && message.tier && <span className={`badge tier-${message.tier}`}>{message.tier} · {TIERS[message.tier] ?? message.tier}</span>}{message.prepared && <span className="badge">Prepared</span>}{hasHistoricalCalculation(message) && message.role === 'assistant' && <span className="badge">Historical illustration</span>}</div><div className="answer-text">{message.content}</div>{hasHistoricalCalculation(message) && message.analysis && <AnalysisDetails value={message.analysis} />}{message.citations?.length ? <div className="citations"><h3>Sources</h3>{message.citations.map(c => <details key={c.id}><summary><FileText size={14} /><span>{c.heading || c.id}</span><ChevronDown size={14} /></summary><blockquote>{c.snippet}</blockquote><CitationLink citation={c} historical={message.kind === "filing"} /></details>)}</div> : null}{(message.tier === 'T2' || message.tier === 'T3') && <a className="professional-link" href="mailto:?subject=GST%20question%20for%20a%20Chartered%20Accountant"><TriangleAlert size={15} />Discuss with your Chartered Accountant</a>}{message.messageId && message.role === 'assistant' && <div className="feedback">{message.feedback ? <span>Feedback saved. Thank you.</span> : <><span>Helpful?</span><button aria-label="Helpful answer" onClick={() => void feedback(index, 'up')}><ThumbsUp size={15} /></button><button onClick={() => void feedback(index, 'down', 'wrong')}>Incorrect</button><button onClick={() => void feedback(index, 'down', 'unclear')}>Unclear</button><button onClick={() => void feedback(index, 'down', 'didnt_answer')}>Not answered</button></>}</div>}</article>)}</div>}
+      {busy && <p className="working" role="status" aria-live="polite">{status || 'Working…'}</p>}<div ref={end} />
+    </div><form className="composer" onSubmit={event => { event.preventDefault(); void submit(); }}><label htmlFor="question">{mode === 'filing' ? 'Filing facts' : 'Your GST question'}</label><div className="row"><textarea id="question" value={input} onChange={event => setInput(event.target.value)} maxLength={8000} rows={mode === 'filing' ? 4 : 2} disabled={prepared} placeholder={mode === 'filing' ? 'January 2022 GSTR-3B; due 2022-02-20; filed 2022-02-26; non-nil; annual turnover ₹40 lakh…' : 'Apna GST sawaal likhein…'} /><button className="btn primary" disabled={busy || restoring || prepared || !input.trim() || (mode === 'chat' && needsProfile)} aria-busy={busy}><ArrowUp size={17} /><span>{mode === 'filing' ? 'Analyze filing' : 'Ask'}</span></button></div><p className="muted small">{prepared ? 'Start your own analysis to edit facts.' : mode === 'filing' ? 'Supports January 2022 GSTR-3B only. Ordinary analysis uses the configured provider; this is not a verified current liability.' : 'Information, not professional advice. Notices, penalties and disputes go to a Chartered Accountant.'}</p></form></section>
+  </main>;
 }
+function AnalysisDetails({ value }: { value: Analysis }) { const entries = Object.entries(value.inputs ?? {}); const calculation = Object.entries(value.calculation ?? {}).filter(([key, val]) => key in fieldLabels && val !== null); if (!entries.length && !calculation.length && !value.coverage?.label) return null; return <details className="analysis-details"><summary>Inputs and calculation <ChevronDown size={14} /></summary>{value.coverage?.label && <p className="muted small">{value.coverage.label}</p>}<dl>{[...entries, ...calculation].map(([key, val]) => <div key={key}><dt>{fieldLabels[key] ?? key.replace(/_/g, ' ')}</dt><dd>{typeof val === 'boolean' ? val ? 'Yes' : 'No' : String(val)}</dd></div>)}</dl></details>; }
+function Onboarding({ profile, onDone }: { profile: Profile | null; onDone: (profile: Profile) => void }) { const requests = useRequests(); const [sells, setSells] = useState(profile?.sells ?? ''); const [state, setState] = useState(profile?.state ?? ''); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); async function submit(event: React.FormEvent) { event.preventDefault(); const ticket = requests.capture(); setBusy(true); setError(''); try { const next = await requests.request<Profile>('/api/user', 'PATCH', { sells, state }); if (next) onDone(next); } catch { if (requests.current(ticket)) setError('Your details were not saved. Please retry.'); } finally { if (requests.current(ticket)) setBusy(false); } } return <section className="onboarding"><h1>Two details to get started.</h1><p className="muted">These help with context. Details that change a calculation still need your confirmation.</p><form className="stack" onSubmit={submit}><label>What do you sell?<input className="input" maxLength={200} required value={sells} onChange={e => setSells(e.target.value)} placeholder="e.g. footwear, design services" /></label><label>Which state are you based in?<input className="input" maxLength={80} required value={state} onChange={e => setState(e.target.value)} placeholder="e.g. Maharashtra" /></label>{error && <p role="alert" className="danger-text">{error}</p>}<button className="btn primary" disabled={busy || !sells.trim() || !state.trim()}>{busy ? 'Saving…' : 'Start chatting'}</button></form></section>; }
 
-// First-run canvas: a warm welcome + one-tap example questions. The chips double as a demo of
-// what GSTPilot covers, so an empty thread never feels like a dead end.
-function EmptyState({ onPick }: { onPick: (q: string) => void }) {
-  return (
-    <div className="py-12 text-center">
-      <div className="mx-auto w-12 h-12 rounded-2xl bg-brand text-white grid place-items-center font-serif text-xl shadow-sm">G</div>
-      <h2 className="mt-4 font-serif text-2xl text-ink">GST ke sawaal, kanoon ke saath.</h2>
-      <p className="mt-2 text-sm text-muted max-w-md mx-auto leading-relaxed">
-        Rates, registration, refunds, ITC, e-way bills — har jawaab ke saath exact section ya notification.
-        Sure na ho to seedha bol deta hai; disputes CA ko bhej deta hai.
-      </p>
-      <div className="mt-7 flex flex-wrap gap-2 justify-center">
-        {EXAMPLES.map((q) => (
-          <button
-            key={q}
-            onClick={() => onPick(q)}
-            className="text-xs text-ink/80 border border-line rounded-full px-3.5 py-1.5 bg-surface hover:border-brand hover:text-brand transition-colors"
-          >
-            {q}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}

@@ -8,7 +8,7 @@
 // filtered to the ids retrieval actually saw, and the whole thing fails soft to a blank draft —
 // a human filling in blanks is fine; a crash in the triage queue is not.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { INTENTS, type Intent, type Tier } from "../../evals/golden-schema";
 
 export type PredraftInput = {

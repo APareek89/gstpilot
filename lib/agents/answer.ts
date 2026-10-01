@@ -8,12 +8,12 @@
 // a resample into a targeted edit, which models are far better at.
 // Every run is traced to Langfuse (best-effort; observability never blocks answering).
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { hybridSearch, type SearchResult } from "../retrieval/search";
 import { verifyCitations, pruneUngrounded, ABSTAIN_PHRASE, type CitationCheck } from "../gates/verify-citations";
 import { gstrLateFee, delayedPaymentInterest, generalArithmetic, registrationThreshold, refundExportRule89 } from "../calculators";
 import { getLangfuse, recordGeneration, type LfParent } from "../observability/langfuse";
-import { getServiceClient, TABLE_PREFIX } from "../supabase";
+import {chunksById} from "../repositories/corpus";
 
 export const GENERATION_MODEL = "claude-sonnet-4-6"; // pinned — changing it is an eval'd migration
 
@@ -118,10 +118,7 @@ Completeness: when a source states the specific number, deadline, form name or c
 const GEN_SOURCE_CHARS = 12_000;
 async function sourcesBlock(retrieval: SearchResult): Promise<{ block: string; chunkTextById: Map<string, string> }> {
   const ids = retrieval.fused.map((c) => c.id);
-  const { data } = await getServiceClient()
-    .from(`${TABLE_PREFIX}legal_chunks`)
-    .select("id, heading_path, text")
-    .in("id", ids);
+  const data = await chunksById(ids);
   const byId = new Map((data ?? []).map((r) => [r.id, r]));
   const chunkTextById = new Map((data ?? []).map((r) => [r.id as string, r.text as string]));
   const block = ids

@@ -13,7 +13,7 @@
 //   • A standing DISCLAIMER is appended by code (not the model): this is general guidance /
 //     common practice, not legal advice, and the exact legal requirement is one question away.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../../providers/client";
 import type { LaneOutcome, LaneExtras } from "../lanes";
 import { GENERATION_MODEL } from "../answer";
 import { memoryContextBlock } from "../../memory/store";

@@ -3,7 +3,7 @@
 // the 20-chunk sign-off inspection. Read-only, same audit-trail reasoning as the list view.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { getChunk } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,7 @@ export default async function ChunkDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = getServiceClient();
-  const { data: c } = await supabase
-    .from(`${TABLE_PREFIX}legal_chunks`)
-    .select("*")
-    .eq("id", decodeURIComponent(id))
-    .single();
+  const c = await getChunk(id);
 
   if (!c) return <main className="p-8">Chunk not found.</main>;
 

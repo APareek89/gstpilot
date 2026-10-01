@@ -3,13 +3,14 @@
 %% CONVENTION: boxes with an ORANGE DASHED border + a 🔧/🔄 line were changed by a recent bug fix
 %% or behavior change (dated). Flags are removed next phase once the change has been test-ridden.
 flowchart TD
+  %% Authenticated entry and the separate one-extraction filing path are in diagram 7.
   U(["YOU: a question<br/>'footwear ka gst kitna hai'"]):::term --> API
 
-  API["API ENTRY<br/>FUNCTION · app/api/ask/route.ts<br/>in: your question (+ threadId + userId)<br/>out: question + CONTEXT (last-20-turns + summary)<br/>+ loads DURABLE MEMORY (profile+facts) + thread PENDING (diagram 6)"]:::fn --> INTAKE
+  API["API ENTRY<br/>FUNCTION · app/api/ask/route.ts<br/>in: your question + owned threadId + verified session<br/>out: question + CONTEXT (last-20-turns + summary)<br/>+ loads DURABLE MEMORY (profile+facts) + thread PENDING (diagram 6)"]:::fn --> INTAKE
 
-  MEMDB[("user_memory + user_profile<br/>DATA · Supabase · loaded per turn")]:::data -.-> API
+  MEMDB[("user_memory + user_profile<br/>DATA · PostgreSQL · loaded per owner/turn")]:::data -.-> API
 
-  INTAKE["INTAKE — classify<br/>AGENT · Haiku · intake.ts<br/>in: question + context + memory block (background only)<br/>out: intent, tier, lane"]:::agent --> G1{"valid output?<br/>FUNCTION · repairIntake() then zod<br/>🔧 FIX 2026-07-10: known vocab slips (lane-word-as-intent)<br/>repaired IN CODE before zod — TIER is never repaired,<br/>invalid risk still fails up (was: benign how-to → wrong T3)"}:::dec
+  INTAKE["INTAKE — classify<br/>AGENT · configured small model · intake.ts<br/>in: question + context + memory block (background only)<br/>out: intent, tier, lane"]:::agent --> G1{"valid output?<br/>FUNCTION · repairIntake() then zod<br/>🔧 FIX 2026-07-10: known vocab slips (lane-word-as-intent)<br/>repaired IN CODE before zod — TIER is never repaired,<br/>invalid risk still fails up (was: benign how-to → wrong T3)"}:::dec
 
   G1 -->|"API kept failing (transient)"| SVC["serviceError<br/>FUNCTION · out: 'service busy, try again'"]:::term
   G1 -->|"output malformed x2"| CA
@@ -22,7 +23,7 @@ flowchart TD
   LANE -->|"calculation"| CALC["CALCULATION lane<br/>(diagram 2)"]:::fn
   LANE -->|"rate_lookup"| RATE["RATE lane<br/>(diagram 3)"]:::fn
   LANE -->|"change_over_time"| TIME["TIMELINE lane<br/>(diagram 4)"]:::fn
-  LANE -->|"guidance (drafting/wording help ONLY —<br/>code guard: substantive words → RAG)"| GUIDE["GUIDANCE lane<br/>AGENT · Sonnet · lanes/guidance.ts<br/>in: question + memory · out: practical example, NO rates/amounts/sections<br/>(G6 FUNCTION strips any that slip) + standing disclaimer<br/>🔧 NEW 2026-07-10 (bug fix: 'description mein kya likhun' was<br/>wrongly T3-escalated — benign how-to had no lane)"]:::agent
+  LANE -->|"guidance (drafting/wording help ONLY —<br/>code guard: substantive words → RAG)"| GUIDE["GUIDANCE lane<br/>AGENT · configured main model · lanes/guidance.ts<br/>in: question + memory · out: practical example, NO rates/amounts/sections<br/>(G6 FUNCTION strips any that slip) + standing disclaimer<br/>🔧 NEW 2026-07-10 (bug fix: 'description mein kya likhun' was<br/>wrongly T3-escalated — benign how-to had no lane)"]:::agent
   LANE -->|"procedure / eligibility /<br/>refund / out_of_scope"| RAG["RAG path<br/>(diagram 5)"]:::fn
 
   CALC --> OUTCOME{"lane result?"}:::dec
@@ -37,7 +38,7 @@ flowchart TD
   OUTCOME -->|"a required input is MISSING<br/>but memory CAN propose it"| CONF["CONFIRMATION — confirm-not-ask (diagram 6)<br/>FUNCTION · buildConfirmation() — pre-written phrases, NO LLM<br/>out: shown assumptions + 'sahi hai?' + only the true gaps<br/>RULE: the number is NOT computed until you confirm"]:::ask
 
   ANS --> OUT2["OUTPUT<br/>FUNCTION · route.ts<br/>in: answer · out: source cards + saved msg + streamed to chat"]:::fn
-  OUT2 --> MEMX["MEMORY EXTRACT (after reply, fire-and-forget)<br/>AGENT · Haiku · lib/memory/extract.ts<br/>in: this turn's exchange · out: durable facts (CLOSED set) → user_memory<br/>confidence starts LOW (0.4); only YOUR confirmation raises it"]:::agent
+  OUT2 --> MEMX["MEMORY EXTRACT (after reply, fire-and-forget)<br/>AGENT · configured small model · lib/memory/extract.ts<br/>in: this turn's exchange · out: durable facts (CLOSED set) → user_memory<br/>confidence starts LOW (0.4); only YOUR confirmation raises it"]:::agent
   MEMX -.-> MEMDB
   OUT2 --> DONE(["shown in your chat"]):::term
   ASK --> DONE

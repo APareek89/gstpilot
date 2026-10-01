@@ -7,7 +7,7 @@
 // audit chain silently and permanently.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { listChunks } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -19,19 +19,7 @@ export default async function ChunksPage({
   searchParams: Promise<{ act?: string; type?: string; status?: string; q?: string }>;
 }) {
   const params = await searchParams;
-  const supabase = getServiceClient();
-
-  let query = supabase
-    .from(`${TABLE_PREFIX}legal_chunks`)
-    .select("id, act, doc_type, section, heading_path, provision_type, status, text", { count: "exact" })
-    .order("id")
-    .limit(100);
-  if (params.act) query = query.eq("act", params.act);
-  if (params.type) query = query.eq("provision_type", params.type);
-  if (params.status) query = query.eq("status", params.status);
-  if (params.q) query = query.ilike("text", `%${params.q}%`);
-
-  const { data: chunks, count, error } = await query;
+  const { chunks, count } = await listChunks(params);
 
   return (
     <main className="p-8 font-sans max-w-5xl mx-auto">
@@ -41,24 +29,23 @@ export default async function ChunksPage({
       </p>
 
       <form className="flex gap-2 mb-6 flex-wrap" method="GET">
-        <select name="act" defaultValue={params.act ?? ""} className="border rounded px-2 py-1 text-sm">
+        <select aria-label="Act" name="act" defaultValue={params.act ?? ""} className="border rounded px-2 py-1 text-sm">
           <option value="">all acts</option>
           {ACTS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
-        <select name="status" defaultValue={params.status ?? ""} className="border rounded px-2 py-1 text-sm">
+        <select aria-label="Source status" name="status" defaultValue={params.status ?? ""} className="border rounded px-2 py-1 text-sm">
           <option value="">all statuses</option>
           <option value="in_force">in_force</option>
           <option value="amended">amended</option>
           <option value="superseded">superseded</option>
         </select>
-        <input name="type" defaultValue={params.type ?? ""} placeholder="provision_type"
+        <input aria-label="Provision type" name="type" defaultValue={params.type ?? ""} placeholder="provision_type"
           className="border rounded px-2 py-1 text-sm w-36" />
-        <input name="q" defaultValue={params.q ?? ""} placeholder="search text…"
+        <input aria-label="Search source text" name="q" defaultValue={params.q ?? ""} placeholder="search text…"
           className="border rounded px-2 py-1 text-sm w-56" />
         <button className="border rounded px-3 py-1 text-sm bg-gray-50 hover:bg-gray-100">filter</button>
       </form>
 
-      {error && <p className="text-red-600 text-sm">DB error: {error.message}</p>}
 
       <table className="w-full text-sm border-collapse">
         <thead>

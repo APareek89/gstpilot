@@ -8,7 +8,7 @@
 // Runs fire-and-forget AFTER the reply is sent (memory writing must never add latency or risk
 // to answering), recorded as a generation node on the SAME pipeline trace via its traceId.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { upsertFact } from "./store";
 import { getLangfuse, recordGeneration } from "../observability/langfuse";
 

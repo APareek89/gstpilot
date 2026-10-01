@@ -4,7 +4,7 @@
 // Failure policy: one re-ask; a second failure defaults to T3 — when unsure about risk,
 // fail UP the ladder (worst case: a routine question meets a CA), never down.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { ProviderError } from "../providers/client";
 import { z } from "zod";
 import { INTENTS } from "../../evals/golden-schema";
 import { LANES, LANE_GUIDE, type Lane } from "./lanes";
@@ -36,7 +36,6 @@ ${LANE_GUIDE}
 Question: ${q}`;
 
 let anthropic: Anthropic | null = null;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // repairIntake — deterministic repair of the model's KNOWN vocabulary slips BEFORE zod judges it.
 // The bug this fixes (seen live, Phase 8c): with conversation context, the classifier answered
@@ -66,31 +65,13 @@ function repairIntake(p: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// A transient error is the model service being briefly unavailable (overload 429/529, a 5xx, or
-// a network blip) — NOT the model producing bad output. The distinction matters: a service hiccup
-// must never masquerade as a real risk escalation, and it deserves a patient retry, not a one-shot.
-function isTransient(e: unknown): boolean {
-  const status = (e as { status?: number })?.status;
-  const name = (e as { name?: string })?.name ?? "";
-  const msg = (e as { message?: string })?.message ?? "";
-  return (
-    status === 429 || status === 408 || (typeof status === "number" && status >= 500) ||
-    /APIConnection|Timeout|Overloaded/i.test(name) ||
-    /fetch failed|network|econn|etimedout|timeout|overloaded/i.test(msg)
-  );
-}
-
-// classifyIntake — intake + G1. Two failure modes, handled DIFFERENTLY:
-//  • the service is briefly down (transient) → retry with backoff; if it stays down, return a
-//    serviceError so the caller can say "try again" — NOT a fake T3 (the old bug: a network blip
-//    escalated routine questions to a CA with a misleading "intake failed twice" reason).
-//  • the model returns unparseable/invalid output (a real classification failure) → one re-ask,
-//    then fail UP the ladder to T3 (risk-unknown = treat cautiously), per the brief.
+// A provider failure may already be billed. Never resubmit it automatically.
+// Only a fully received, metered response with invalid classification JSON gets
+// one bounded semantic re-ask; persistent invalid classification fails up to T3.
 export async function classifyIntake(question: string, parent?: LfParent): Promise<{ intake: Intake; g1_retries: number; serviceError?: boolean }> {
   anthropic ??= new Anthropic();
-  let sawTransient = false;
   let parseFailures = 0;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await recordGeneration(parent, { name: "intake", model: "claude-haiku-4-5-20251001", input: question },
         () => anthropic!.messages.create({
@@ -104,10 +85,8 @@ export async function classifyIntake(question: string, parent?: LfParent): Promi
       const parsed = IntakeSchema.parse(repairIntake(JSON.parse(raw.replace(/^```json?\s*|\s*```$/g, ""))));
       return { intake: parsed, g1_retries: parseFailures };
     } catch (e) {
-      if (isTransient(e)) {
-        sawTransient = true;
-        await sleep(500 * (attempt + 1)); // 0.5s, 1s, 1.5s backoff
-        continue;
+      if (e instanceof ProviderError || !(e instanceof SyntaxError || e instanceof z.ZodError)) {
+        return { intake: { intent: "out_of_scope", tier: "T1", lane: "out_of_scope", reason: "intake service temporarily unavailable" }, g1_retries: parseFailures, serviceError: true };
       }
       // a genuine parse/validation failure — re-ask once, then give up to the T3 fallback
       parseFailures++;
@@ -115,14 +94,6 @@ export async function classifyIntake(question: string, parent?: LfParent): Promi
     }
   }
 
-  if (sawTransient && parseFailures < 2) {
-    // The service, not the question, failed. Signal it — the caller shows a "try again", which is
-    // safe (no answer given) AND honest (we don't pretend this is a high-risk dispute).
-    return {
-      intake: { intent: "out_of_scope", tier: "T1", lane: "out_of_scope", reason: "intake service temporarily unavailable" },
-      g1_retries: 0, serviceError: true,
-    };
-  }
   // Repeated unparseable output: risk-unknown → fail up cautiously (better a routine question meets
   // a CA than a risky one gets a confident answer). Honest reason, not "failed twice".
   return {

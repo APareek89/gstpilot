@@ -5,7 +5,7 @@
 // user's product is below/above the threshold, or asks. Everything the model returns is checked
 // against the table; the rate itself is never model-produced — it is read from the table.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { RATES, RATE_ITEMS, findBySynonym, findByItem, type RateEntry } from "./table";
 import { recordGeneration, type LfParent } from "../observability/langfuse";
 

@@ -2,7 +2,9 @@
 // citations, feedback, and a link to the Langfuse trace. ?live=1 auto-refreshes.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { CitationLink } from "@/components/CitationLink";
+import type { Citation } from "@/lib/client/citations";
+import { listConversations } from "@/lib/repositories/admin";
 import { langfuseHost, getLangfuseProjectId } from "@/lib/observability/langfuse";
 
 export const dynamic = "force-dynamic";
@@ -17,11 +19,7 @@ export default async function ConversationsPage({
   const host = langfuseHost();
   const projectId = await getLangfuseProjectId();
   const traceUrl = (id: string) => (projectId ? `${host}/project/${projectId}/traces/${id}` : `${host}/traces/${id}`);
-  const { data: msgs } = await getServiceClient()
-    .from(`${TABLE_PREFIX}messages`)
-    .select("id, thread_id, created_at, role, content, tier, citations, trace_id, feedback, feedback_reason")
-    .order("created_at", { ascending: false })
-    .limit(80);
+  const msgs = await listConversations();
 
   return (
     <main className="p-8 font-sans max-w-4xl mx-auto text-sm">
@@ -48,8 +46,8 @@ export default async function ConversationsPage({
             <div className="whitespace-pre-wrap">{m.content.slice(0, 600)}{m.content.length > 600 ? "…" : ""}</div>
             {Array.isArray(m.citations) && m.citations.length > 0 && (
               <div className="mt-1 text-xs font-mono text-indigo-700">
-                {(m.citations as any[]).map((c) => (
-                  <Link key={c.id} href={`/admin/chunks/${encodeURIComponent(c.id)}`} className="mr-2 hover:underline">{c.id}</Link>
+                {(m.citations as Citation[]).map((c) => (
+                  <CitationLink key={c.id} citation={c} historical={m.kind === "filing"} label={c.id} className="mr-2 hover:underline" />
                 ))}
               </div>
             )}

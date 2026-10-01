@@ -1,3 +1,4 @@
+import {historicalCoverage} from "../repositories/corpus";
 // THE PIPELINE — the supervised team. Orchestrates:
 // intake → [G1 zod+enum, T3 short-circuit] → retrieval → [G2 relevance floor] →
 // resolution (Phase 5 grounded generation + [G4 citations]) → [G3 recompute numbers] →
@@ -5,7 +6,7 @@
 // Every step appends to an ordered TRAJECTORY (logged to Langfuse) so eval rules can assert
 // process properties: retrieval-before-resolution, T3-never-reaches-reply, steps ≤ 8.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import { classifyIntake, caHandoff, type Intake } from "./intake";
 import { answerQuestion } from "./answer";
 import { runCalculationLane } from "./lanes/calculation";
@@ -117,6 +118,19 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
     return complete({ reply, traceId: trace.id, tier: intake.tier, intent: intake.intent, escalated: true, abstained: false, trajectory });
   }
 
+  // The bundled calculators/rate table are learning examples, not a current law corpus.
+  // Only plain arithmetic supplied by the user bypasses the dated-source coverage boundary.
+  const plainArithmetic = /(?:%|percent|multiply|divide|sum)/i.test(question) && /\d/.test(question) && !/late fee|interest|threshold|registration/i.test(question);
+  if (!plainArithmetic && !(await historicalCoverage(question))) {
+    const reply = "The reviewed sources here do not establish the answer for your period. I cannot verify current GST rates, thresholds, eligibility or deadlines. You can use Filing analysis for the explicitly dated January 2022 GSTR-3B illustration, or consult a qualified GST adviser.";
+    log("source-coverage", false, Date.now(), "limited historical source coverage");
+    return complete({reply,traceId:trace.id,tier:intake.tier,intent:intake.intent,escalated:false,abstained:true,trajectory});
+  }
+  if (!plainArithmetic && ['calculation','rate_lookup','change_over_time','guidance'].includes(intake.lane)) {
+    const reply = "Use Filing analysis to review the January 2022 GSTR-3B inputs and historical formula. Other legal calculations and current rates are outside this source coverage.";
+    return complete({reply,traceId:trace.id,tier:intake.tier,intent:intake.intent,escalated:false,abstained:true,trajectory});
+  }
+
   // ROUTER: intake now also picks a LANE (the question's TYPE). T3 already short-circuited.
   // The calculation lane owns the third move (ASK): it fills its calculator's inputs from the
   // conversation, computes the exact figure when they're all present, or gives the general
@@ -183,8 +197,8 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
 
   // G2: relevance floor — if even the BEST chunk is weakly related, generation ran on sand.
   const bestDense = res.retrieval.dense[0]?.score ?? 0;
-  const g2ok = bestDense >= G2_MIN_RELEVANCE;
-  log("G2-retrieval-floor", g2ok, t0, `best cosine ${bestDense.toFixed(3)} vs ${G2_MIN_RELEVANCE}`);
+  const g2ok = res.retrieval.mode === 'keyword' ? res.retrieval.keyword.length > 0 && res.retrieval.fused.length > 0 : bestDense >= G2_MIN_RELEVANCE;
+  log("G2-retrieval-floor", g2ok, t0, res.retrieval.mode === 'keyword' ? 'SQL keyword matches; no vector relevance claim' : `best cosine ${bestDense.toFixed(3)} vs ${G2_MIN_RELEVANCE}`);
   if (!g2ok) {
     const reply = `${ABSTAIN_PHRASE.charAt(0).toUpperCase() + ABSTAIN_PHRASE.slice(1)} — mere paas is topic pe koi seedha source nahi mila. Aap chahen to CA se confirm kar sakte hain.`;
     trace.update({ output: reply, metadata: { g2_blocked: true } });

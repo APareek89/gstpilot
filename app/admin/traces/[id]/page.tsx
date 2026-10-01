@@ -3,7 +3,7 @@
 // and the fusion table showing the exact RRF arithmetic per surviving chunk.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { getTrace } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,7 @@ export default async function TraceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = getServiceClient();
-  const { data: t } = await supabase
-    .from(`${TABLE_PREFIX}retrieval_traces`)
-    .select("*")
-    .eq("id", id)
-    .single();
+  const t = await getTrace(id);
 
   if (!t) return <main className="p-8">Trace not found.</main>;
 

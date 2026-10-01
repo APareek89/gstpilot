@@ -1,0 +1,30 @@
+-- Apply once as the database administrator, atomically after the ten original migrations.
+-- Runtime is a separate DML-only role. No original or external database is adopted.
+CREATE TABLE gstpilot_portfolio_schema(version integer PRIMARY KEY,installed_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE gstpilot_users(id uuid PRIMARY KEY,email text NOT NULL UNIQUE,password_hash text NOT NULL,disabled boolean NOT NULL DEFAULT false,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE gstpilot_sessions(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES gstpilot_users(id),created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL,revoked_at timestamptz);
+CREATE INDEX gstpilot_sessions_owner ON gstpilot_sessions(owner_id);
+CREATE TABLE gstpilot_rates(key text PRIMARY KEY,window_start timestamptz NOT NULL,count integer NOT NULL);
+ALTER TABLE gstpilot_user_profile ADD CONSTRAINT gstpilot_profile_owner FOREIGN KEY(user_id) REFERENCES gstpilot_users(id);
+ALTER TABLE gstpilot_threads ALTER COLUMN user_id SET NOT NULL;
+ALTER TABLE gstpilot_threads ADD COLUMN kind text NOT NULL DEFAULT 'chat' CHECK(kind IN ('chat','filing'));
+ALTER TABLE gstpilot_threads ADD COLUMN prepared boolean NOT NULL DEFAULT false;
+ALTER TABLE gstpilot_threads ADD COLUMN example_id text;
+ALTER TABLE gstpilot_threads ADD CONSTRAINT gstpilot_thread_owner_unique UNIQUE(id,user_id);
+CREATE UNIQUE INDEX gstpilot_example_owner ON gstpilot_threads(user_id,example_id) WHERE example_id IS NOT NULL;
+ALTER TABLE gstpilot_messages ADD COLUMN owner_id uuid NOT NULL REFERENCES gstpilot_users(id);
+ALTER TABLE gstpilot_messages ADD COLUMN kind text NOT NULL DEFAULT 'chat' CHECK(kind IN ('chat','filing'));
+ALTER TABLE gstpilot_messages ADD COLUMN prepared boolean NOT NULL DEFAULT false;
+ALTER TABLE gstpilot_messages ADD COLUMN analysis jsonb;
+ALTER TABLE gstpilot_messages ADD CONSTRAINT gstpilot_message_owner_thread FOREIGN KEY(thread_id,owner_id) REFERENCES gstpilot_threads(id,user_id);
+ALTER TABLE gstpilot_user_memory ADD CONSTRAINT gstpilot_memory_owner_thread FOREIGN KEY(provenance,user_id) REFERENCES gstpilot_threads(id,user_id);
+ALTER TABLE gstpilot_retrieval_traces ADD COLUMN owner_id uuid NOT NULL REFERENCES gstpilot_users(id);
+ALTER TABLE gstpilot_eval_runs ADD COLUMN owner_id uuid NOT NULL REFERENCES gstpilot_users(id);
+CREATE INDEX gstpilot_trace_owner ON gstpilot_retrieval_traces(owner_id,created_at);
+CREATE INDEX gstpilot_eval_owner ON gstpilot_eval_runs(owner_id,created_at);
+CREATE TABLE gstpilot_personal_golden(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES gstpilot_users(id),source_trace_id text,labels jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE gstpilot_usage(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES gstpilot_users(id),session_id uuid NOT NULL REFERENCES gstpilot_sessions(id),request_id uuid NOT NULL,thread_id uuid,kind text NOT NULL,provider text NOT NULL,model text NOT NULL,input_price numeric NOT NULL,output_price numeric NOT NULL,cached_price numeric,reserved_usd numeric NOT NULL,actual_usd numeric,status text NOT NULL CHECK(status IN ('reserved','dispatched','complete','uncertain','released')),input_tokens integer,output_tokens integer,cached_input_tokens integer,reasoning_output_tokens integer,provider_request_id text,provider_model text,created_at timestamptz NOT NULL DEFAULT now(),dispatched_at timestamptz,settled_at timestamptz);
+CREATE INDEX gstpilot_usage_owner ON gstpilot_usage(owner_id,created_at);
+CREATE TABLE gstpilot_operations(id uuid PRIMARY KEY,owner_id uuid NOT NULL REFERENCES gstpilot_users(id),expires_at timestamptz NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+ALTER TABLE gstpilot_legal_chunks ADD COLUMN coverage jsonb;
+INSERT INTO gstpilot_portfolio_schema(version) VALUES(1);

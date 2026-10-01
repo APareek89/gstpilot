@@ -3,7 +3,7 @@
 // arrive in real time while testing the app in another tab.
 
 import Link from "next/link";
-import { getServiceClient, TABLE_PREFIX } from "@/lib/supabase";
+import { listTraces } from "@/lib/repositories/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,7 @@ export default async function TracesPage({
   searchParams: Promise<{ live?: string }>;
 }) {
   const { live } = await searchParams;
-  const supabase = getServiceClient();
-  const { data: traces } = await supabase
-    .from(`${TABLE_PREFIX}retrieval_traces`)
-    .select("id, created_at, source, query, timings_ms, fused")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const traces = await listTraces();
 
   return (
     <main className="p-8 font-sans max-w-5xl mx-auto">

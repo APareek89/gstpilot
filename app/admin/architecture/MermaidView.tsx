@@ -275,7 +275,7 @@ export default function MermaidView({ diagrams, prompts, staleInfo, memory }: { 
             <div key={p.name} className="border rounded-lg bg-white p-4">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-1">
                 <span className="font-semibold text-gray-900">{p.name}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${p.model === "Sonnet" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>{p.model}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${p.model === "Configured main model" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>{p.model}</span>
                 <span className="text-xs text-gray-500">{p.stage}</span>
                 <code className="text-xs text-indigo-600">{p.file}</code>
               </div>

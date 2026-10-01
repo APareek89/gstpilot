@@ -4,6 +4,18 @@
 
 import { Blindspot, type NodeRequirements } from "@blindspot/sdk";
 import { Langfuse } from "langfuse";
+import { randomUUID } from "node:crypto";
+import { modelSpec } from "../providers/wire";
+
+// Hosted traces stay in the owner-scoped PostgreSQL store. No prompts, account
+// identities or provider errors leave through optional third-party telemetry.
+const externalTelemetry = () => process.env.NODE_ENV !== "production" && process.env.GSTPILOT_EXTERNAL_TELEMETRY === "1";
+function localTrace(traceId = randomUUID()): any {
+  const trace: any = { id: randomUUID(), traceId, event() {}, end() {}, update() {}, score() {} };
+  trace.span = () => localTrace(traceId); trace.generation = () => localTrace(traceId);
+  return trace;
+}
+const localTelemetry = { trace: () => localTrace(), flushAsync: async () => {}, shutdownAsync: async () => {} } as unknown as Langfuse;
 
 // Store the client on globalThis, NOT a plain module variable. In Next.js dev, editing any file
 // hot-reloads modules and RESETS a plain `let client` — which orphans the old client's queued
@@ -33,12 +45,13 @@ export async function recordGeneration<T>(
   fn: () => Promise<T>,
   extract?: (r: T) => { output?: unknown; inputTokens?: number; outputTokens?: number }
 ): Promise<T> {
-  const gen = parent?.generation({ name: meta.name, model: meta.model, input: meta.input });
+  const actualModel = modelSpec(meta.model);
+  const gen = parent?.generation({ name: meta.name, model: actualModel.model, ...(externalTelemetry() ? { input: meta.input } : {}) });
   try {
     // Keep Langfuse as gstpilot's detailed trace while also sending the same generation timing,
     // model and token counts to Blindspot. The operation is invoked exactly once; Blindspot is
     // best-effort and its SDK never changes which provider or model gstpilot calls.
-    const r = parent
+    const r = parent && externalTelemetry()
       ? await getBlindspot().observeGeneration(
           {
             executionId: parent.traceId,
@@ -46,8 +59,8 @@ export async function recordGeneration<T>(
             // from that stable root. Preserve the richer Langfuse parent separately as metadata.
             parentId: parent.traceId,
             node: meta.name,
-            provider: "anthropic",
-            model: meta.model,
+            provider: actualModel.provider,
+            model: actualModel.model,
             input: meta.input,
             requirements: {
               inputModalities: ["text"],
@@ -62,14 +75,14 @@ export async function recordGeneration<T>(
       : await fn();
     const e = extract?.(r);
     gen?.end({
-      output: e?.output,
+      ...(externalTelemetry() ? { output: e?.output } : {}),
       ...(e && (e.inputTokens != null || e.outputTokens != null)
         ? { usageDetails: { input: e.inputTokens ?? 0, output: e.outputTokens ?? 0 } }
         : {}),
     });
     return r;
   } catch (err) {
-    gen?.end({ level: "ERROR", statusMessage: (err as Error).message });
+    gen?.end({ level: "ERROR", statusMessage: "Model operation failed" });
     throw err;
   }
 }
@@ -95,6 +108,7 @@ export function beginBlindspotExecution(
   input: unknown,
   sessionId?: string,
 ) {
+  if (!externalTelemetry()) return { complete(_output: unknown) {} };
   const client = getBlindspot();
   const root = client.span({
     id: executionId,
@@ -127,6 +141,7 @@ export function beginBlindspotExecution(
 }
 
 export function getLangfuse(): Langfuse {
+  if (!externalTelemetry()) return localTelemetry;
   g.__gstpilot_lf ??= new Langfuse({
     publicKey: process.env.LANGFUSE_PUBLIC_KEY,
     secretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -145,6 +160,7 @@ export function langfuseHost(): string {
 // Server-side only (uses the secret key). Env var LANGFUSE_PROJECT_ID short-circuits the fetch.
 let cachedProjectId: string | null | undefined;
 export async function getLangfuseProjectId(): Promise<string | null> {
+  if (!externalTelemetry()) return null;
   if (cachedProjectId !== undefined) return cachedProjectId;
   if (process.env.LANGFUSE_PROJECT_ID) return (cachedProjectId = process.env.LANGFUSE_PROJECT_ID);
   try {
@@ -160,6 +176,7 @@ export async function getLangfuseProjectId(): Promise<string | null> {
 // The correct, clickable trace URL. Falls back to the (imperfect) bare URL only if the project
 // id can't be resolved — never returns nothing.
 export async function langfuseTraceUrl(traceId: string): Promise<string> {
+  if (!externalTelemetry()) return "";
   const pid = await getLangfuseProjectId();
   return pid ? `${langfuseHost()}/project/${pid}/traces/${traceId}` : `${langfuseHost()}/traces/${traceId}`;
 }

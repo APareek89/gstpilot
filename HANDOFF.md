@@ -4,6 +4,24 @@
 > then docs/PRODUCT_BRIEF.md. Update this file at every phase boundary and whenever the
 > session context is nearly exhausted.
 
+## Current launch revision — 1 October 2026
+
+The portfolio launch instruction supersedes the historical email-only identity, Supabase/Render environment and palette described below. Keep the older sessions as history; do not copy their credentials or assume their corpus exists in the new database.
+
+- Fresh canonical clone is on `codex/launch-2026-09-30`, based on `4b11365beb05c0a53d880be76d98ef52692bac73`. Original baseline and the narrow “Calculate”/“late” routing repair were accepted before implementation.
+- Real Auth.js Credentials and PostgreSQL session revocation replace `gstpilot_user` browser identity. Client requests carry the expected owner; account changes immediately hide and cancel the old workspace. No global browser identity is imported.
+- Existing chat and memory behavior remain available. The new filing action uses one extraction then existing deterministic math, with explicit January 2022 GSTR-3B coverage. The canonical prepared example is permanently provider-free; editing it starts an ordinary draft.
+- History restores from owner-scoped threads/messages. Evidence views use authenticated repository DTOs. Retrieval is an explicit POST rather than a model call on page load. Personal triage retains review-before-approval.
+- Shared Lovable tokens, local Inter/Roboto Mono, Lucide, both themes and compact layouts are implemented. Eleven focused client tests and the current TypeScript check pass. The coherent production build and live browser checks pass, including historical citation links and T3 disclosure corrections; no console errors were observed.
+- Live origin: `https://gstpilot.3-6-183-210.sslip.io`; isolated integrated preview uses port 8981 and `.next-integrated`. Preserve original baseline port 8980 and its `.next` output.
+- Legal scope is limited and historical. The ₹300 example does not establish a current due date/liability; source cards link the reviewed official documents. Google/reset are absent, and no media generation is needed.
+
+Live acceptance is complete. The exact image is `sha256:ca026ef671cea06a8860712d53d82eb33593b3423778893c45103f884f128b45`, logical Docker tag `portfolio/gstpilot:f8058a32493897f9`, in ordinary live mode with verified PostgreSQL TLS. Validation: 48 compiled Auth.js/API checks (58 assertions/57 requests), 18 PostgreSQL contracts, two provider/PostgreSQL contracts and 11 client regressions. Live two-account acceptance used 29 provider-free requests.
+
+One ordinary filing POST completed on 1 October 2026 at 09:55:20.640–09:55:22.974 UTC, with zero retries. OpenAI `gpt-4o-mini` recorded 608 input/78 output/zero cached tokens and an estimated USD 0.000138. It extracted the supplied historical facts, applied the formula and persisted ₹300. Independent owner/foreign-owner readback passed. No live current-law validation, full general-chat pipeline or return submission is claimed.
+
+Operational limits: old setup/ingestion/embedding/eval CLI paths retain legacy service or laptop assumptions and may spend; they are not hosted setup instructions. Diagram 7 describes the launch path. The rendered MASTER diagram retains older failure/memory/lane details and omits the hosted coverage gate. No runtime diagram edits were made after the frozen build.
+
 ## What this project is
 Citation-grounded GST Q&A agent for Indian e-commerce sellers. Every claim cites a chunk;
 abstains when sources don't cover; T3 (notices/disputes) escalates to a CA. Anand is a

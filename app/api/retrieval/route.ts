@@ -1,0 +1,3 @@
+import {randomUUID} from 'node:crypto';
+import {requireActor} from '@/lib/server/auth';import {route,json,readJson,text} from '@/lib/server/http';import {userLimit} from '@/lib/server/security';import {withExecution} from '@/lib/server/execution';import {withCapacity} from '@/lib/server/usage';import {hybridSearch} from '@/lib/retrieval/search';
+export const POST=route(async(req:Request)=>{const a=await requireActor(req,{write:true});const b=await readJson(req,12000),q=text(b.query,'Query',8000);await userLimit(a,'retrieval',30,3600);return withExecution({ownerId:a.id,sessionId:a.sid,requestId:randomUUID(),mode:'live',purpose:'retrieval'},()=>withCapacity(a.id,async()=>json(await hybridSearch(q,'playground'))));});

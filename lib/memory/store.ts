@@ -9,10 +9,9 @@
 // facts, rises only through the confirmation UX, and DECAYS with time since confirmation — an
 // old unconfirmed fact quietly demotes itself back to "worth re-asking".
 
-import { getServiceClient, TABLE_PREFIX } from "../supabase";
-
-const MEMORY = `${TABLE_PREFIX}user_memory`;
-const PROFILE = `${TABLE_PREFIX}user_profile`;
+import {getProfile,getFacts,remember} from '../repositories/business';
+import {requireExecution} from '../server/execution';
+import {HttpError} from '../server/http';
 
 export type MemoryFact = {
   id: string;
@@ -53,15 +52,10 @@ export function effectiveConfidence(f: Pick<MemoryFact, "confidence" | "as_of" |
 // degrades to exactly the Phase-8b behavior (memory is an enhancement, never a dependency).
 export async function loadMemory(userId: string | undefined | null): Promise<MemoryBundle | null> {
   if (!userId) return null;
-  const s = getServiceClient();
-  const { data: profile } = await s.from(PROFILE).select("email, sells, state").eq("user_id", userId).maybeSingle();
-  if (!profile) return null;
-  const { data: facts } = await s
-    .from(MEMORY)
-    .select("id, fact, value, confidence, kind, provenance, as_of, last_confirmed")
-    .eq("user_id", userId)
-    .order("as_of", { ascending: false });
-  return { userId, profile, facts: (facts ?? []) as MemoryFact[] };
+  if(requireExecution().ownerId!==userId)throw new HttpError(404,'Memory not found.');
+  const profile=await getProfile(userId);if(!profile)return null;
+  const facts=await getFacts(userId);
+  return {userId,profile,facts:facts.map(f=>({...f,as_of:new Date(f.as_of).toISOString(),last_confirmed:f.last_confirmed?new Date(f.last_confirmed).toISOString():null})) as MemoryFact[]};
 }
 
 // getFact — merged view of one behavioral fact. A memory row (learned in conversation, newer)
@@ -112,20 +106,7 @@ export function memoryContextBlock(bundle: MemoryBundle | null): string {
 // confidence up a little (reinforcement); a CHANGED value resets to low confidence with a fresh
 // as_of (the world moved — the old belief doesn't transfer its trust to the new one).
 export async function upsertFact(userId: string, fact: string, value: string, provenance: string | null): Promise<void> {
-  const s = getServiceClient();
-  const { data: existing } = await s.from(MEMORY).select("id, value, confidence").eq("user_id", userId).eq("fact", fact).maybeSingle();
-  if (existing && existing.value === value) {
-    await s.from(MEMORY).update({
-      confidence: Math.min(0.7, (existing.confidence as number) + CONF_REINFORCE),
-      provenance, as_of: new Date().toISOString(),
-    }).eq("id", existing.id);
-  } else if (existing) {
-    await s.from(MEMORY).update({
-      value, confidence: CONF_EXTRACTED, provenance, as_of: new Date().toISOString(), last_confirmed: null,
-    }).eq("id", existing.id);
-  } else {
-    await s.from(MEMORY).insert({ user_id: userId, fact, value, confidence: CONF_EXTRACTED, provenance, kind: "behavioral" });
-  }
+  await remember(userId,fact,value,provenance??undefined,false);
 }
 
 // confirmFact — the confirmation UX just verified this fact (behavioral or a procedural
@@ -135,10 +116,5 @@ export async function confirmFact(
   userId: string, fact: string, value: string, provenance: string | null,
   kind: "behavioral" | "default" = "behavioral"
 ): Promise<void> {
-  const s = getServiceClient();
-  const now = new Date().toISOString();
-  await s.from(MEMORY).upsert(
-    { user_id: userId, fact, value, confidence: CONF_CONFIRMED, provenance, kind, as_of: now, last_confirmed: now },
-    { onConflict: "user_id,fact" }
-  );
+  await remember(userId,fact,value,provenance??undefined,true,kind);
 }

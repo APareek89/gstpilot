@@ -1,0 +1,27 @@
+*
+!Dockerfile
+!.dockerignore
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!next.config.ts
+!tsconfig.json
+!postcss.config.mjs
+!eslint.config.mjs
+!app/
+!app/**
+!lib/
+!lib/**
+!components/
+!components/**
+!evals/
+!evals/golden-schema.ts
+!docs/
+!docs/mermaid/
+!docs/mermaid/**
+!public/
+!public/**
+!vendor/
+!vendor/**
+**/.env*
+**/* 2.*

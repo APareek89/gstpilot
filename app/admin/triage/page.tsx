@@ -5,7 +5,8 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRequests } from "@/components/AccountShell";
 import { INTENTS } from "@/evals/golden-schema";
 
 type Item = {
@@ -18,6 +19,8 @@ type Labels = {
 };
 
 export default function TriagePage() {
+  const requests = useRequests(); const operation = useRef(0);
+  const [error, setError] = useState(""); const [approving, setApproving] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [version, setVersion] = useState("");
   const [host, setHost] = useState("https://cloud.langfuse.com");
@@ -28,28 +31,23 @@ export default function TriagePage() {
   const [saved, setSaved] = useState<Record<string, { id: string; version: string }>>({});
 
   async function load() {
-    const d = await (await fetch("/api/triage")).json();
-    setItems(d.items ?? []); setVersion(d.goldenVersion ?? "?"); setHost(d.langfuseHost ?? host); setProjectId(d.langfuseProjectId ?? null);
+    const d = await requests.request<{items: Item[]; goldenVersion:string; langfuseHost:string; langfuseProjectId:string|null}>("/api/triage");
+    if (d) { setItems(d.items ?? []); setVersion(d.goldenVersion ?? "?"); setHost(d.langfuseHost ?? host); setProjectId(d.langfuseProjectId ?? null); }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-
+  useEffect(() => { const ticket = requests.capture(); void load().catch(() => { if (requests.current(ticket)) setError('Triage could not be loaded. Reload to retry.'); }); }, []);
   async function predraft(it: Item) {
-    setOpenId(it.messageId); setDraft(null); setDrafting(true);
-    const d = await (await fetch("/api/triage", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "predraft", question: it.question, reason: it.reason }),
-    })).json();
-    setDraft({ labels: d.labels, retrievedIds: d.retrievedIds ?? [] }); setDrafting(false);
+    const ticket = requests.capture(); const serial = ++operation.current; setOpenId(it.messageId); setDraft(null); setDrafting(true); setError('');
+    try { const d = await requests.request<{labels:Labels;retrievedIds:string[]}>('/api/triage', 'POST', {action:'predraft',question:it.question,reason:it.reason});
+      if (d && serial === operation.current) setDraft({labels:d.labels,retrievedIds:d.retrievedIds ?? []});
+    } catch (e) { if (requests.current(ticket) && serial === operation.current) setError(e instanceof Error ? e.message : 'Draft was not completed.'); }
+    finally { if (requests.current(ticket) && serial === operation.current) setDrafting(false); }
   }
-
   async function approve(it: Item) {
-    if (!draft) return;
-    const d = await (await fetch("/api/triage", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "approve", labels: draft.labels, sourceTraceId: it.traceId, approvedBy: "Anand" }),
-    })).json();
-    if (d.ok) { setSaved((s) => ({ ...s, [it.messageId]: { id: d.id, version: d.version } })); setVersion(d.version); setOpenId(null); setDraft(null); }
-    else alert("Validation failed — fix before it can gate CI:\n\n" + (d.problems ?? []).join("\n"));
+    if (!draft || approving) return; const ticket = requests.capture(); const serial = operation.current; setApproving(true); setError('');
+    try { const d = await requests.request<{ok:boolean;id:string;version:string;problems?:string[]}>('/api/triage','POST',{action:'approve',labels:draft.labels,sourceTraceId:it.traceId});
+      if (d && requests.current(ticket) && serial === operation.current) { if (d.ok) { setSaved(s => ({...s,[it.messageId]:{id:d.id,version:d.version}})); setVersion(d.version); setOpenId(null); setDraft(null); } else setError('Please correct the draft: '+(d.problems ?? []).join('; ')); }
+    } catch (e) { if (requests.current(ticket) && serial === operation.current) setError(e instanceof Error ? e.message : 'Draft was not saved.'); }
+    finally { if (requests.current(ticket)) setApproving(false); }
   }
 
   const setL = (patch: Partial<Labels>) => setDraft((dd) => (dd ? { ...dd, labels: { ...dd.labels, ...patch } } : dd));
@@ -66,14 +64,15 @@ export default function TriagePage() {
         <span className="text-xs text-muted">golden set <span className="font-mono">v{version}</span></span>
       </div>
       <p className="text-muted mb-4 max-w-2xl">
-        Every 👎 is a free, real, pre-labeled test case. Draft the labels with Haiku, then correct
-        and approve each one — approved cases join the golden set and gate every future change.
+        Review feedback from your conversations. Drafting labels uses the configured provider.
+        Correct every field before adding an approved case to your evaluation set.
       </p>
       <div className="mb-6 rounded-lg border border-amber/30 bg-amber-soft/60 px-3 py-2 text-xs text-amber">
         ⚠️ You verify every field. The pre-draft is a speed-up, never the truth — these labels feed
         zero-tolerance gates, so a wrong fact or chunk-id would make CI enforce a <em>wrong</em> answer.
       </div>
 
+      {error && <p className="alert danger mb-4" role="alert">{error}</p>}
       {items.length === 0 && <p className="text-muted">No 👎 yet. They appear here the moment a user thumbs-down an answer.</p>}
 
       <div className="space-y-4">
@@ -93,11 +92,11 @@ export default function TriagePage() {
               {!it.alreadyCaptured && !done && (
                 <div className="mt-3">
                   {openId !== it.messageId ? (
-                    <button onClick={() => predraft(it)} disabled={!it.question} className="rounded-lg bg-brand text-white px-3 py-1.5 text-xs font-medium hover:bg-brand-ink disabled:opacity-40">
+                    <button disabled={drafting || approving || !it.question} onClick={() => void predraft(it)} className="rounded-lg bg-[var(--bg-accent)] text-white px-3 py-1.5 text-xs font-medium hover:bg-brand-ink disabled:opacity-40">
                       Draft golden labels →
                     </button>
                   ) : drafting ? (
-                    <p className="text-muted text-xs animate-pulse">Haiku drafting labels…</p>
+                    <p className="text-muted text-xs animate-pulse">Drafting labels…</p>
                   ) : draft ? (
                     <div className="rounded-lg border border-line bg-paper/60 p-3 space-y-3">
                       <p className="text-[11px] uppercase tracking-wide text-muted">Review &amp; correct — every field is yours</p>
@@ -123,7 +122,7 @@ export default function TriagePage() {
                           <div className="flex flex-wrap gap-1.5">
                             {draft.retrievedIds.map((id) => (
                               <button key={id} onClick={() => toggleChunk(id)}
-                                className={`font-mono text-[11px] px-1.5 py-0.5 rounded border ${draft.labels.relevant_chunk_ids.includes(id) ? "bg-brand text-white border-brand" : "bg-surface border-line text-muted hover:border-brand"}`}>
+                                className={`font-mono text-[11px] px-1.5 py-0.5 rounded border ${draft.labels.relevant_chunk_ids.includes(id) ? "bg-[var(--bg-accent)] text-white border-brand" : "bg-surface border-line text-muted hover:border-brand"}`}>
                                 {id}
                               </button>
                             ))}
@@ -137,7 +136,7 @@ export default function TriagePage() {
                         <textarea rows={2} value={draft.labels.must_not_contain.join("\n")} onChange={(e) => setL({ must_not_contain: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1 font-mono" />
                       </label>
                       <div className="flex gap-2 pt-1">
-                        <button onClick={() => approve(it)} className="rounded-lg bg-brand text-white px-3 py-1.5 text-xs font-medium hover:bg-brand-ink">✓ Approve &amp; add to golden (verified)</button>
+                        <button disabled={drafting || approving} onClick={() => void approve(it)} className="rounded-lg bg-[var(--bg-accent)] text-white px-3 py-1.5 text-xs font-medium hover:bg-brand-ink">✓ Approve &amp; add to golden (verified)</button>
                         <button onClick={() => { setOpenId(null); setDraft(null); }} className="rounded-lg border border-line px-3 py-1.5 text-xs text-muted hover:text-ink">Cancel</button>
                       </div>
                     </div>

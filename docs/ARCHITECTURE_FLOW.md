@@ -6,12 +6,12 @@
 
 | Colour | Meaning |
 |---|---|
-| **blue** | **AGENT** — an LLM (Haiku or Sonnet) does this step |
+| **blue** | **AGENT** — the configured model does this step |
 | **green** | **FUNCTION** — our deterministic TypeScript, no model |
 | **teal** | a **question back to you** (the clarification / ASK) |
 | **purple diamond** | a **decision** (who decides is on the box) |
 | **grey** | a **result** (answer / abstain / escalate) |
-| **lilac** | **data / library** (Supabase · rate table · bge-m3) |
+| **lilac** | **data / library** (PostgreSQL · rate table · embedding adapter) |
 | **orange dashed border** | **🔧 recently FIXED / 🔄 recently CHANGED** — the box carries a dated 🔧/🔄 line saying what changed and why; flags are removed next phase once test-ridden |
 
 Read each box as: **NAME · [AGENT/FUNCTION] · in: … · out: …**
@@ -22,13 +22,14 @@ Read each box as: **NAME · [AGENT/FUNCTION] · in: … · out: …**
 
 ```mermaid
 flowchart TD
+  %% Authenticated entry and the separate one-extraction filing path are in diagram 7.
   U(["YOU: a question<br/>'footwear ka gst kitna hai'"]):::term --> API
 
-  API["API ENTRY<br/>FUNCTION · app/api/ask/route.ts<br/>in: your question (+ threadId + userId)<br/>out: question + CONTEXT (last-20-turns + summary)<br/>+ loads DURABLE MEMORY (profile+facts) + thread PENDING (diagram 6)"]:::fn --> INTAKE
+  API["API ENTRY<br/>FUNCTION · app/api/ask/route.ts<br/>in: your question + owned threadId + verified session<br/>out: question + CONTEXT (last-20-turns + summary)<br/>+ loads DURABLE MEMORY (profile+facts) + thread PENDING (diagram 6)"]:::fn --> INTAKE
 
-  MEMDB[("user_memory + user_profile<br/>DATA · Supabase · loaded per turn")]:::data -.-> API
+  MEMDB[("user_memory + user_profile<br/>DATA · PostgreSQL · loaded per owner/turn")]:::data -.-> API
 
-  INTAKE["INTAKE — classify<br/>AGENT · Haiku · intake.ts<br/>in: question + context + memory block (background only)<br/>out: intent, tier, lane"]:::agent --> G1{"valid output?<br/>FUNCTION · repairIntake() then zod<br/>🔧 FIX 2026-07-10: known vocab slips (lane-word-as-intent)<br/>repaired IN CODE before zod — TIER is never repaired,<br/>invalid risk still fails up (was: benign how-to → wrong T3)"}:::dec
+  INTAKE["INTAKE — classify<br/>AGENT · configured small model · intake.ts<br/>in: question + context + memory block (background only)<br/>out: intent, tier, lane"]:::agent --> G1{"valid output?<br/>FUNCTION · repairIntake() then zod<br/>🔧 FIX 2026-07-10: known vocab slips (lane-word-as-intent)<br/>repaired IN CODE before zod — TIER is never repaired,<br/>invalid risk still fails up (was: benign how-to → wrong T3)"}:::dec
 
   G1 -->|"API kept failing (transient)"| SVC["serviceError<br/>FUNCTION · out: 'service busy, try again'"]:::term
   G1 -->|"output malformed x2"| CA
@@ -41,7 +42,7 @@ flowchart TD
   LANE -->|"calculation"| CALC["CALCULATION lane<br/>(diagram 2)"]:::fn
   LANE -->|"rate_lookup"| RATE["RATE lane<br/>(diagram 3)"]:::fn
   LANE -->|"change_over_time"| TIME["TIMELINE lane<br/>(diagram 4)"]:::fn
-  LANE -->|"guidance (drafting/wording help ONLY —<br/>code guard: substantive words → RAG)"| GUIDE["GUIDANCE lane<br/>AGENT · Sonnet · lanes/guidance.ts<br/>in: question + memory · out: practical example, NO rates/amounts/sections<br/>(G6 FUNCTION strips any that slip) + standing disclaimer<br/>🔧 NEW 2026-07-10 (bug fix: 'description mein kya likhun' was<br/>wrongly T3-escalated — benign how-to had no lane)"]:::agent
+  LANE -->|"guidance (drafting/wording help ONLY —<br/>code guard: substantive words → RAG)"| GUIDE["GUIDANCE lane<br/>AGENT · configured main model · lanes/guidance.ts<br/>in: question + memory · out: practical example, NO rates/amounts/sections<br/>(G6 FUNCTION strips any that slip) + standing disclaimer<br/>🔧 NEW 2026-07-10 (bug fix: 'description mein kya likhun' was<br/>wrongly T3-escalated — benign how-to had no lane)"]:::agent
   LANE -->|"procedure / eligibility /<br/>refund / out_of_scope"| RAG["RAG path<br/>(diagram 5)"]:::fn
 
   CALC --> OUTCOME{"lane result?"}:::dec
@@ -56,7 +57,7 @@ flowchart TD
   OUTCOME -->|"a required input is MISSING<br/>but memory CAN propose it"| CONF["CONFIRMATION — confirm-not-ask (diagram 6)<br/>FUNCTION · buildConfirmation() — pre-written phrases, NO LLM<br/>out: shown assumptions + 'sahi hai?' + only the true gaps<br/>RULE: the number is NOT computed until you confirm"]:::ask
 
   ANS --> OUT2["OUTPUT<br/>FUNCTION · route.ts<br/>in: answer · out: source cards + saved msg + streamed to chat"]:::fn
-  OUT2 --> MEMX["MEMORY EXTRACT (after reply, fire-and-forget)<br/>AGENT · Haiku · lib/memory/extract.ts<br/>in: this turn's exchange · out: durable facts (CLOSED set) → user_memory<br/>confidence starts LOW (0.4); only YOUR confirmation raises it"]:::agent
+  OUT2 --> MEMX["MEMORY EXTRACT (after reply, fire-and-forget)<br/>AGENT · configured small model · lib/memory/extract.ts<br/>in: this turn's exchange · out: durable facts (CLOSED set) → user_memory<br/>confidence starts LOW (0.4); only YOUR confirmation raises it"]:::agent
   MEMX -.-> MEMDB
   OUT2 --> DONE(["shown in your chat"]):::term
   ASK --> DONE
@@ -72,6 +73,7 @@ flowchart TD
   classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
   classDef ask fill:#cffafe,stroke:#0891b2,color:#083344;
   classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;
+  %% fix flag: orange dashed border layered ON TOP of a box's base colour
   classDef fix stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 3;
   class G1,ROUTER,GUIDE fix;
 ```
@@ -305,3 +307,41 @@ flowchart TD
 | Gates | `lib/gates/{verify-citations,g3-recompute}.ts` |
 | Observability | `lib/observability/langfuse.ts` |
 </content>
+
+
+## 7 · Account boundaries and historical filing (2026-10-01)
+
+The filing action is separate from general chat: one field extraction then the existing deterministic formula. The server-owned prepared example shares calculation and persistence without a provider call. Only the reviewed January 2022 GSTR-3B illustration is supported; it does not establish current liability. Provider names shown in older detailed diagrams denote their original roles; runtime selection is centralized in `lib/providers/client.ts`.
+
+```mermaid
+flowchart TD
+  USER(["YOU: sign in or create an account"]):::term --> AUTH["ACCOUNT<br/>FUNCTION · Auth.js Credentials + bcrypt<br/>in: email and password<br/>out: signed cookie + revocable PostgreSQL session"]:::fn
+  AUTH --> UI["WORKSPACE<br/>FUNCTION · AccountShell + owner generation<br/>in: verified account<br/>out: restored own conversations and memory"]:::fn
+  UI --> CHOICE{"Choose an action"}:::dec
+  CHOICE -->|Chat| CHAT["EXISTING CHAT PIPELINE<br/>intake, lane routing, citations, clarification<br/>confirmed memory and professional handoff<br/>see diagrams 1–6"]:::fn
+  CHOICE -->|Filing analysis| FACTS["EDITABLE FACTS<br/>January 2022 GSTR-3B only<br/>user supplies due date and filing date"]:::fn
+  CHOICE -->|Try with an example| SAMPLE["PREPARED EXAMPLE<br/>FUNCTION · server canonical ID<br/>fixed historical facts + validated slots<br/>no provider dispatch, even in live mode"]:::fn
+  FACTS --> GUARD["REQUEST BOUNDARY<br/>FUNCTION · actor + expected owner + CSRF<br/>body, usage and capacity bounds"]:::fn
+  GUARD --> EXTRACT["FIELD EXTRACTION<br/>AGENT · configured provider, one bounded call<br/>out: candidate inputs, not arithmetic"]:::agent
+  EXTRACT --> CHECK{"FUNCTION · validate inputs + historical scope<br/>explicit supplied ISO dates, period, return and turnover"}:::dec
+  SAMPLE --> CHECK
+  CHECK -->|Missing or unsupported| LIMIT["CLARIFY OR STATE THE LIMIT<br/>FUNCTION · no extra model request"]:::term
+  CHECK -->|Supported| CALC["HISTORICAL FORMULA<br/>FUNCTION · existing gstrLateFee<br/>out: days, daily fee, cap and illustrative amount"]:::fn
+  CALC --> SAVE["SAVE AND STREAM<br/>FUNCTION · own thread + messages + inputs + sources<br/>prepared provenance remains permanent"]:::fn
+  LIMIT --> SAVE
+  SAVE --> VIEW["RESULT<br/>historical illustration + inputs and calculation<br/>official source links + owner feedback<br/>not a verified current liability or filing submission"]:::term
+  VIEW --> EDIT["Analyze your own facts<br/>new ordinary draft; no silent sample-to-paid switch"]:::fn
+  EDIT --> FACTS
+  UI --> EXP["ACCOUNT CHANGE OR EXPIRY<br/>FUNCTION · abort and reject old JSON/SSE<br/>clear visible workspace before refreshing session"]:::fn
+  DB[("PostgreSQL<br/>users, sessions, owner-bound conversations/memory<br/>usage ledger and limited read-only corpus")]:::data
+  AUTH -.-> DB
+  SAVE -.-> DB
+  CHAT -.-> DB
+  classDef agent fill:#dbeafe,stroke:#2563eb,color:#0b2a5b;
+  classDef fn fill:#dcfce7,stroke:#16a34a,color:#052e16;
+  classDef dec fill:#f3e8ff,stroke:#9333ea,color:#2a0a4a;
+  classDef term fill:#e5e7eb,stroke:#6b7280,color:#111827;
+  classDef data fill:#ede9fe,stroke:#7c3aed,color:#2a0a4a;
+  classDef fix stroke:#ea580c,stroke-width:3px,stroke-dasharray:6 3;
+  class AUTH,UI,GUARD,EXTRACT,CHECK,SAMPLE,SAVE,EXP fix;
+```

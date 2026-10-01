@@ -8,7 +8,7 @@
 // deterministic validation with a strict trust boundary — never fabricate a value the user
 // didn't state); buildClarification() is pure code turning the missing slots into one message.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../providers/client";
 import type { ToolSpec, SlotSpec } from "../tools/registry";
 import type { AssumedSlot } from "../memory/working";
 import { recordGeneration, type LfParent } from "../observability/langfuse";
@@ -54,7 +54,7 @@ let anthropic: Anthropic | null = null;
 // anything else is treated as not-given, which is the safe direction (we ask rather than
 // compute on a mis-read). On any model/parse failure we fall back to "everything missing",
 // so a broken extractor degrades into asking, never into a wrong number.
-export async function fillSlots(spec: ToolSpec, question: string, context?: string, parent?: LfParent): Promise<SlotFill> {
+export async function fillSlots(spec: ToolSpec, question: string, context?: string, parent?: LfParent, strictErrors = false): Promise<SlotFill> {
   const convo = context ? `${context}\nUser: ${question}` : `User: ${question}`;
   const today = new Date().toISOString().slice(0, 10); // the clock the extractor was missing
   const values: Record<string, string | number | boolean> = {};
@@ -75,7 +75,8 @@ export async function fillSlots(spec: ToolSpec, question: string, context?: stri
       const clean = validate(s, v);
       if (clean !== null) values[s.name] = clean;
     }
-  } catch {
+  } catch (error) {
+    if (strictErrors) throw error;
     /* extraction failed → values stays empty → all required slots reported missing → we ask */
   }
   const missing = spec.slots.filter((s) => s.required && !(s.name in values));

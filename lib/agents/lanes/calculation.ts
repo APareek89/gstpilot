@@ -10,7 +10,7 @@
 // The exact-number path is deterministic and carries the calculator's own legal-basis citations
 // (like every "model proposes, code disposes" tool), so it is grounded without touching the gate.
 
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "../../providers/client";
 import { fillSlots, buildClarification, buildConfirmation } from "../clarify";
 import { pickCalcTool, type LaneOutcome, type LaneExtras } from "../lanes";
 import { TOOL_SPECS } from "../../tools/registry";
@@ -225,7 +225,7 @@ function toolFits(toolName: string, question: string, context: string | undefine
   if (toolName === "registration_threshold") return intent === "registration" || /register|registration|gstin|threshold|turnover limit/.test(t);
   if (toolName === "delayed_payment_interest") return /\binterest\b|section\s*50|s50\b|delayed payment|byaaj|byaj/.test(t);
   // gstr_late_fee — the default; require an actual late-fee signal to accept it
-  return intent === "late_fee_interest" || /late|fee|gstr|return|filing|\bfile\b/.test(t);
+  return intent === "late_fee_interest" || /\blate\b|\bfees?\b|gstr|return|filing|\bfile\b/.test(t);
 }
 
 let anthropic: Anthropic | null = null;
