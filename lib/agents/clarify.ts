@@ -72,7 +72,7 @@ export async function fillSlots(spec: ToolSpec, question: string, context?: stri
     const parsed = JSON.parse(raw.replace(/^```json?\s*|\s*```$/g, ""));
     for (const s of spec.slots) {
       const v = parsed?.[s.name];
-      const clean = validate(s, v);
+      const clean = validateSlot(s, v);
       if (clean !== null) values[s.name] = clean;
     }
   } catch (error) {
@@ -86,12 +86,12 @@ export async function fillSlots(spec: ToolSpec, question: string, context?: stri
 // validate — the trust boundary in code. Returns the cleaned value or null (= not usable, so
 // treat as not given). Dates must parse; numbers must be finite; booleans must be real
 // booleans; enums must be one of the offered options (case-insensitive match to the canonical).
-function validate(s: SlotSpec, v: unknown): string | number | boolean | null {
+export function validateSlot(s: SlotSpec, v: unknown): string | number | boolean | null {
   if (v === null || v === undefined || v === "") return null;
   switch (s.type) {
     case "date": {
       const str = String(v);
-      return /^\d{4}-\d{2}-\d{2}$/.test(str) && !Number.isNaN(Date.parse(str)) ? str : null;
+      return /^\d{4}-\d{2}-\d{2}$/.test(str) && !Number.isNaN(Date.parse(str)) && new Date(str).toISOString().slice(0,10) === str ? str : null;
     }
     case "number": {
       if (typeof v === "number") return Number.isFinite(v) ? v : null;

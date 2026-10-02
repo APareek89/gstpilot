@@ -6,7 +6,7 @@ export const MAX_INPUT_BYTES = 96 * 1024;
 export const MAX_OUTPUT_TOKENS = 2048;
 export class ProviderError extends Error {
   readonly noRetry = true;
-  constructor(readonly category: "input_bound" | "configuration" | "transport_unknown" | "provider_rejected" | "invalid_response" | "truncated" | "refusal") {
+  constructor(readonly category: "input_bound" | "configuration" | "transport_unknown" | "provider_rejected" | "invalid_response" | "truncated" | "refusal", readonly upstreamStatus?: number) {
     super(`Model request failed: ${category}`); this.name = "ProviderError";
   }
 }

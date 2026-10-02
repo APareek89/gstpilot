@@ -9,7 +9,8 @@ import {historicalCoverage} from "../repositories/corpus";
 import Anthropic from "../providers/client";
 import { classifyIntake, caHandoff, type Intake } from "./intake";
 import { answerQuestion } from "./answer";
-import { runCalculationLane } from "./lanes/calculation";
+import { runCalculationLane, tryGeneralMath } from "./lanes/calculation";
+import {isPlainArithmetic} from './arithmetic-scope';
 import { runRateLane } from "./lanes/rate";
 import { runTimelineLane } from "./lanes/timeline";
 import { runGuidanceLane } from "./lanes/guidance";
@@ -120,7 +121,14 @@ export async function askGSTPilot(question: string, opts: PipelineOpts = {}): Pr
 
   // The bundled calculators/rate table are learning examples, not a current law corpus.
   // Only plain arithmetic supplied by the user bypasses the dated-source coverage boundary.
-  const plainArithmetic = /(?:%|percent|multiply|divide|sum)/i.test(question) && /\d/.test(question) && !/late fee|interest|threshold|registration/i.test(question);
+  const plainArithmetic = isPlainArithmetic(question, intake.lane);
+  if (plainArithmetic) {
+    // Deliberately exclude prior legal context, remembered defaults and pending
+    // calculators. Failure to extract math does not authorize another lane.
+    const math = await tryGeneralMath(question, undefined, trace);
+    log('supplied-arithmetic', !!math, Date.now());
+    return complete({reply:math?.reply ?? 'Please supply one arithmetic operation and its numbers. I cannot infer a legal rate or liability.',traceId:trace.id,tier:intake.tier,intent:intake.intent,escalated:false,abstained:!math,trajectory});
+  }
   if (!plainArithmetic && !(await historicalCoverage(question))) {
     const reply = "The reviewed sources here do not establish the answer for your period. I cannot verify current GST rates, thresholds, eligibility or deadlines. You can use Filing analysis for the explicitly dated January 2022 GSTR-3B illustration, or consult a qualified GST adviser.";
     log("source-coverage", false, Date.now(), "limited historical source coverage");

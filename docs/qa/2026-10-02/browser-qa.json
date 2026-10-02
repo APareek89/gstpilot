@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-02",
+  "status": "passed_scoped_browser_checks",
+  "operator": "parent/root via in-app browser",
+  "scope": "local candidate; not hosted release",
+  "checks": [
+    "Parent normal-auth new chat: current 2026 rate question with18% returns coverage abstention.",
+    "Parent desktop/mobile390 review: readable result, document width390, no document overflow."
+  ],
+  "screenshots": [
+    {
+      "path": "/Users/macbook/Documents/Codex/portfolio/_workstreams/portfolio-fmea-20261002/screenshots/gstpilot-current-rate-desktop.png",
+      "sha256": "0d379b14d99ab8fa0a749707079034e00d3c3a2811c63141c0278e3e7ca25137"
+    },
+    {
+      "path": "/Users/macbook/Documents/Codex/portfolio/_workstreams/portfolio-fmea-20261002/screenshots/gstpilot-current-rate-mobile.png",
+      "sha256": "171396b29b23d2ab05ebc1ac0abf47ee0c194b4268b51c321b1d125de3d669a0"
+    }
+  ],
+  "provider_calls": 0,
+  "limits": "Only named UI scenarios verified; no blanket UI or live-provider acceptance."
+}

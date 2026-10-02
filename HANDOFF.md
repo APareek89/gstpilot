@@ -1,3 +1,9 @@
+## FMEA correction — 2 October 2026, local candidate
+
+Reviewed 108 scenarios across 12 categories; three grouped changes address historical-coverage bypass/contaminated arithmetic routing, invalid calendar dates and provider diagnostics. [Report and matrix](docs/qa/2026-10-02/report.md). Current-law questions containing a percentage now abstain; strictly supplied arithmetic runs independently of prior legal context and cannot fall into a tax calculator when extraction fails.
+
+Passed: 33 provider/FMEA Vitest tests, 11 client tests, 18 PostgreSQL checks, 2 provider/PG fixtures, 49 compiled Auth.js checks (60 assertions/58 requests), TypeScript and isolated build. Zero real provider calls; normal-auth keyless preview: 9003. Runtime frozen; root owns browser/release review. No current-law validation, cloud changes or worker commit. Earlier launch receipts below remain historical.
+
 # GSTPilot — Session Handoff
 
 > For any new Claude session: read this FULLY, then CLAUDE.md (Teaching Contract — binding),

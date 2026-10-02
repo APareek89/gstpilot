@@ -16,6 +16,12 @@ beforeEach(() => { vi.clearAllMocks(); process.env.GSTPILOT_PROVIDER='openai'; p
 afterEach(() => vi.unstubAllGlobals());
 
 describe('metered text/tool provider compatibility', () => {
+ it('retains safe rejection status without logging credentials or upstream error bodies',async()=>{
+  const log=vi.spyOn(console,'warn').mockImplementation(()=>{});vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:{message:'secret-fixture and private prompt'}},{status:401})));
+  try{await expect(withExecution(actor(),()=>new ProviderClient().messages.create(input()))).rejects.toMatchObject({category:'provider_rejected',upstreamStatus:401});
+   expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({event:'provider_failure',provider:'openai',upstreamStatus:401});expect(JSON.stringify(log.mock.calls)).not.toMatch(/test-provider-only|secret-fixture|private prompt/);
+  }finally{log.mockRestore();}
+ });
  it('round-trips actual tool proposals and results into Chat Completions while preserving system text', async () => {
   let sent: any; vi.stubGlobal('fetch',vi.fn(async (url, options) => { expect(url).toBe('https://api.openai.com/v1/chat/completions'); expect(options.redirect).toBe('error'); sent=JSON.parse(options.body); return Response.json(body({ choices: [{ finish_reason:'tool_calls', message: { content:null, tool_calls:[{id:'call_1',type:'function',function:{name:'gstr_late_fee',arguments:'{"nil_return":false}'}}] } }] }),{headers:{'x-request-id':'req_fixture'}}); }));
   const response=await withExecution(actor(),()=>new ProviderClient().messages.create({...input(),system:'Use supplied records',tools:[{name:'gstr_late_fee',input_schema:{type:'object',properties:{nil_return:{type:'boolean'}}}}]}));

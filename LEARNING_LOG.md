@@ -362,3 +362,9 @@ next session's #1 lever.
 
 ## Session 6 addendum — Phase 6 (supervised team with gates)
 Built: intake+G1(zod, default-up-to-T3) · T3→CA handoff · pipeline with trajectory logging · G2 floor (threshold pending Anand) · G3 recompute-in-code · reply+G5 (model verifies, never generates facts) · trajectory rules · consistency runner. Results: T3 recall 1.0, T3 pass^5 1.0, trajectory rules 1.0, tier accuracy 0.867 — but T2 pass^5 0.5: three cases fail 5/5 (deterministic Phase-5 leftovers), two flicker (10111, 00100 — real inconsistency, move those decisions into code next). Key concept: pass^5 vs average — 4-of-5 runs averages 0.8 but pass^5 = 0; users experience the unluckiest run. Key finding: G2 distributions overlap heavily (cosine = topical closeness, not answerability) — the false-answer defense is behavioral (abstention+gates), not retrieval-score-based.
+
+## 2 October 2026 — the arithmetic exception is a scope boundary
+
+A digit plus percentage used to bypass the dated-source guard regardless of intake lane; prior pending legal calculator state could then influence execution. The exception now requires a calculation lane, supplied numbers and arithmetic wording while rejecting legal applicability. It calls the arithmetic extractor without context/memory and returns directly; extraction failure asks for numbers. Actual pipeline fixture tests trap entry into every legacy lane, and compiled HTTP tests confirm a current-rate+percentage question abstains.
+
+Date.parse normalizes impossible dates; slot validation now requires the ISO date to round-trip unchanged. Provider 401 telemetry retains only bounded status/category/request reference without keys, body or prompt. The 108-scenario matrix distinguishes these three grouped fixes from existing controls and product limits. Source/current-law accuracy remains outside free proxy acceptance.

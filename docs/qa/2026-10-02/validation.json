@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-02",
+  "baseline_commit": "7b7acb456ee85d994eb632acde7c8aafdd92a697",
+  "scope": "local_free_candidate",
+  "real_provider_calls": 0,
+  "deployed_by_worker": false,
+  "scenario_count": 108,
+  "tests": {
+    "provider_and_fmea_vitest": 33,
+    "client_node_tests": 11,
+    "postgres_repository_checks": 18,
+    "provider_postgres_fixture_cases": 2,
+    "compiled_http_unique_checks": 49,
+    "compiled_http_assertions": 60,
+    "compiled_http_requests": 58
+  },
+  "production_build": "passed",
+  "typecheck": "passed",
+  "browser": "passed_scoped_checks; see browser-qa.json",
+  "network": "Local server and SDK fixture runners reject non-loopback network. SDK responses are explicit fixtures.",
+  "historical_receipts_preserved": true,
+  "matrix_validation": "passed: IDs/scenarios unique,12categories,SOD product,counts,CSV/JSON parity,evidence paths exist",
+  "new_source_files": [
+    "lib/agents/arithmetic-scope.ts"
+  ],
+  "tests_and_build_logs": "External worker receipts retained in _workstreams/app-fmea-20261002; reports list distinct scopes.",
+  "tracked_runtime_diff_sha256": "a444fccc077b55e40cff0c4d707755efe8adea41dd3a449fefddac6263054157",
+  "inventory_note": "Diff hash excludes untracked files; new source paths are listed separately. Exact source/archive identity is a later packaging gate."
+}

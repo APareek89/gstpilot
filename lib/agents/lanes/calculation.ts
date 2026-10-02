@@ -234,7 +234,7 @@ let anthropic: Anthropic | null = null;
 // lakh at 18% GST") and compute it EXACTLY with the safe dispatcher. Returns null when it isn't a
 // clean calculation (then the lane falls back to RAG). No citation: the rate here was given BY THE
 // USER and the result is arithmetic — not an assertion about what the law says, so no gate.
-async function tryGeneralMath(question: string, context?: string, parent?: LfParent): Promise<LaneOutcome | null> {
+export async function tryGeneralMath(question: string, context?: string, parent?: LfParent): Promise<LaneOutcome | null> {
   try {
     anthropic ??= new Anthropic();
     const res = await recordGeneration(parent, { name: "extract-arithmetic", model: "claude-haiku-4-5-20251001", input: question },

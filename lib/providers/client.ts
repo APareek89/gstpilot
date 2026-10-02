@@ -35,6 +35,7 @@ export class ProviderClient {
       // cannot erase the real tokens already durably accounted for above.
       return messageFrom(raw, spec, usage);
     } catch (error) {
+      console.warn(JSON.stringify({event:'provider_failure',provider:spec.provider,model:spec.model,requestId:actor.requestId,category:error instanceof ProviderError?error.category:'transport_unknown',upstreamStatus:error instanceof ProviderError?error.upstreamStatus:undefined}));
       if (!settled) await uncertain(reservation);
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("transport_unknown");

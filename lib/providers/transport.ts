@@ -21,7 +21,7 @@ export async function providerPost(provider: "openai" | "anthropic", key: string
       const { value, done } = await Promise.race([reader.read(), deadline]); if (done) break;
       total += value.byteLength; if (total > RESPONSE_BYTES) throw new ProviderError("transport_unknown"); chunks.push(value);
     }
-    if (!res.ok) throw new ProviderError("provider_rejected");
+    if (!res.ok) throw new ProviderError("provider_rejected",res.status);
     let raw: unknown; try { raw = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw new ProviderError("invalid_response"); }
     const requestId = (res.headers.get("x-request-id") ?? res.headers.get("request-id") ?? "").match(/^[A-Za-z0-9._:-]{1,200}$/)?.[0];
     return { raw, requestId };
