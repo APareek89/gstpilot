@@ -2,7 +2,7 @@
 
 The matrix covers **108 distinct possible failure scenarios across all 12 Power Coding categories**. It does not claim that many bugs: 7 scenario rows are addressed by 3 grouped corrective changes. Existing controls, residual risks, product limits, historical limits and unverified cases are identified separately.
 
-Baseline commit: `7b7acb456ee85d994eb632acde7c8aafdd92a697`. This is a local candidate, not a deployment receipt. The worker made no real provider calls or live-data writes and did not operate a deployment.
+Baseline commit: `7b7acb456ee85d994eb632acde7c8aafdd92a697`. Root deployed the reviewed image; see `aws-release.json`. The worker made no real provider calls or live-data writes and did not operate a deployment.
 
 ## Corrective changes
 
@@ -35,3 +35,7 @@ The parent owns browser evidence. The keyless normal-auth preview is `http://127
 ## Release gates
 
 The parent must review the exact diff, package/build the exact Linux image, preserve live environment/mounts, smoke it without network, and perform the approved release plus normal-account readback. No paid quality, current-law or load claim is implied by a green fixture.
+
+## Root release verification
+
+Root activated image `cd9952ec3669` on 2 October 2026 using an image-only update. Authentication remains enabled and mock mode disabled. Environment, mounts, runtime bounds and other apps were preserved; the release operator made zero provider calls. `aws-release.json` records exact image/source hashes. This proves deployment, not a new paid model-quality check.

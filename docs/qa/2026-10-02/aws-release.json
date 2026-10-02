@@ -1,0 +1,19 @@
+{
+  "status": "image_only_update_verified",
+  "app": "gstpilot",
+  "image": "sha256:cd9952ec36699ed948406ba743c26fbe6d8188420dffa85332896668ec117d82",
+  "image_id": "sha256:cd9952ec36699ed948406ba743c26fbe6d8188420dffa85332896668ec117d82",
+  "previous_image_id": "sha256:ca026ef671cea06a8860712d53d82eb33593b3423778893c45103f884f128b45",
+  "config_before_sha256": "ef8a150ba642fc4e138602283dd83b98ab5595c171c604c671d676a6e3c2a252",
+  "config_after_sha256": "e1fb93c706ca9a0216380928913336888c0429660406377ae7d837b58b0c9736",
+  "source_sha256": "2823571af642fcfbd55bb806c0dcdb1a906373ca311d8ee4209f315288bcee9d",
+  "config_preserved_except_image": true,
+  "environment_identical": true,
+  "mounts_identical": true,
+  "bounds_identical": true,
+  "other_apps_unchanged": true,
+  "auth": true,
+  "mock": false,
+  "provider_calls": 0,
+  "generated_at": "2026-10-02T08:47:31.841163+00:00"
+}
